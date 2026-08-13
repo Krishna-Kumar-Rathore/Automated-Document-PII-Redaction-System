@@ -3,7 +3,7 @@
 Detects PII in document images (Aadhaar/PAN/business cards/newspapers/etc.),
 maps every detected entity back to its pixel region, and produces an
 annotated image, a redacted image, and an auditable `result.json`.
-
+     
 The design goal that drives everything: preserve the chain
 
 ```
