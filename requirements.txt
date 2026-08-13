@@ -3,6 +3,7 @@ rapidocr-onnxruntime>=1.3.0   # OCR: PP-OCR models via ONNX Runtime (CPU, Window
 opencv-python>=4.8.0          # preprocessing + visualization
 numpy>=1.24.0
 PyYAML>=6.0
+numpy>=1.24.0
 
 # Later phases (added as we reach them):
 # gliner            # Phase 6 - configurable-label NER
