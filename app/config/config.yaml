@@ -1,0 +1,115 @@
+# ============================================================================
+# Intelligent Document Redaction - central configuration
+# Single source of truth. Every module reads from here; no magic numbers in code.
+# Sections marked [PHASE N] are wired up in that phase.
+# ============================================================================
+
+paths:
+  names_dir: "data/names"
+  outputs_dir: "outputs"
+  models_dir: "models"
+
+# ---------------------------------------------------------------------------
+# Preprocessing [PHASE 2]
+# Conservative by default: PP-OCR generally prefers a natural image, so heavy
+# binarisation is OFF. Every geometric op is tracked in an affine matrix so OCR
+# boxes can be mapped back to ORIGINAL image coordinates.
+# ---------------------------------------------------------------------------
+preprocessing:
+  upscale_if_small: true      # upscale when the longest side is below min_long_side
+  min_long_side: 1000         # px; small scans OCR poorly
+  max_long_side: 2600         # px; cap to keep inference fast
+  denoise: true               # light bilateral filter (edge-preserving)
+  deskew: true                # rotate to correct small skew
+  deskew_min_angle: 0.3       # deg; ignore noise below this
+  deskew_max_angle: 15.0      # deg; above this, assume detection error and skip
+
+# ---------------------------------------------------------------------------
+# OCR [PHASE 2]
+# ---------------------------------------------------------------------------
+ocr:
+  engine: "rapidocr"          # swappable behind the OCREngine interface
+  text_score: 0.5             # drop detections below this confidence
+  # RapidOCR ships PP-OCR English mobile models. Leave null to use its defaults.
+  det_model_path: null
+  rec_model_path: null
+
+# ---------------------------------------------------------------------------
+# Entity registry [PHASE 4+]
+# Configurable so classes can be added without touching code.
+# `validators` only BOOST confidence when a structured pattern matches; a
+# document without valid formats (e.g. a newspaper) is still handled.
+# ---------------------------------------------------------------------------
+entities:
+  registry:
+    - PERSON_NAME
+    - PHONE_NUMBER
+    - EMAIL
+    - URL
+    - UPI_ID
+    - ADDRESS
+    - ORGANIZATION
+    - DATE
+    - ID_NUMBER
+    - ACCOUNT_NUMBER
+    - OTHER_PII
+
+# ---------------------------------------------------------------------------
+# Regex detectors [PHASE 4]  (patterns live in code module, tunables here)
+# ---------------------------------------------------------------------------
+regex:
+  enabled: [EMAIL, PHONE_NUMBER, URL, UPI_ID]
+  validators:                 # optional confidence boosters, not gatekeepers
+    aadhaar: true             # 12 digits + Verhoeff checksum
+    pan: true                 # ABCDE1234F
+    ifsc: true                # SBIN0001234
+
+# ---------------------------------------------------------------------------
+# Name detection [PHASE 5]
+# Tuned for PRECISION: a single trie hit is NOT enough (inputs may be newspapers
+# where many capitalised words are common nouns). Require agreement of signals.
+# ---------------------------------------------------------------------------
+names:
+  normalize: lowercase        # normalisation before trie lookup
+  min_signals: 2              # signals required to accept a name span
+  prefixes: ["mr", "mrs", "ms", "dr", "shri", "smt", "kumari"]
+  context_labels: ["name", "full name", "applicant name", "father name",
+                   "father's name", "candidate name"]
+
+# ---------------------------------------------------------------------------
+# Entity resolution [PHASE 7]  (weights are tunable and eval-driven, not fixed)
+# ---------------------------------------------------------------------------
+resolver:
+  detector_weights:
+    regex: 0.95
+    gliner: 0.80
+    name_trie: 0.55
+    context_rule: 0.65
+    validator: 0.90
+  overlap_strategy: "highest_score"   # or "longest_span"
+  min_final_confidence: 0.50
+
+# ---------------------------------------------------------------------------
+# Visualization / redaction [PHASE 7-8]
+# ---------------------------------------------------------------------------
+visualization:
+  box_thickness: 2
+  font_scale: 0.5
+  draw_labels: true
+  colors:                     # BGR; configurable per class
+    PERSON_NAME:   [0, 180, 0]
+    EMAIL:         [0, 0, 220]
+    PHONE_NUMBER:  [0, 0, 0]
+    URL:           [220, 0, 0]
+    UPI_ID:        [180, 0, 180]
+    ID_NUMBER:     [0, 140, 220]
+    ACCOUNT_NUMBER: [0, 140, 220]
+    DATE:          [120, 120, 0]
+    ADDRESS:       [80, 80, 200]
+    ORGANIZATION:  [200, 120, 0]
+    OTHER_PII:     [128, 128, 128]
+  default_color: [128, 128, 128]
+  redaction_fill: [0, 0, 0]   # opaque black for true redaction
+
+logging:
+  level: "INFO"

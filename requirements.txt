@@ -1,0 +1,12 @@
+# Core (Phase 1-2)
+rapidocr-onnxruntime>=1.3.0   # OCR: PP-OCR models via ONNX Runtime (CPU, Windows-friendly)
+opencv-python>=4.8.0          # preprocessing + visualization
+numpy>=1.24.0
+PyYAML>=6.0
+
+# Later phases (added as we reach them):
+# gliner            # Phase 6 - configurable-label NER
+# onnxruntime       # Phase 6 - GLiNER ONNX inference
+# streamlit         # Phase 9 - UI
+# fastapi, uvicorn  # optional API layer
+# presidio-analyzer # Phase 11 - eval benchmark baseline

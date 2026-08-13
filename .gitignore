@@ -1,0 +1,37 @@
+# ---- Virtual environments ----
+.venv/
+venv/
+env/
+myenv/
+
+# ---- Python cache / build ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+
+# ---- Test / tooling caches ----
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- Generated pipeline outputs ----
+outputs/
+
+# ---- Downloaded OCR / NER model weights (fetched on first run) ----
+models/
+*.onnx
+
+# ---- Real documents containing PII: NEVER commit these ----
+# Keep synthetic test files (e.g. sample.jpg). Put real Aadhaar/PAN/card
+# images under data/private/ so they stay out of git.
+data/private/
+*.real.*
+
+# ---- OS / editor cruft ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
