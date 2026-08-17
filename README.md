@@ -36,15 +36,7 @@ This system aims to **detect PII reliably, redact it on the actual image, and ma
 - **Swappable models** — OCR and NER sit behind interfaces, so backends can be replaced without touching the pipeline.
 - **CPU-friendly** — runs a full document in a few seconds on a laptop with no GPU.
 
-## Architecture
 
-**High-Level Design**
-
-![High-Level Design](docs/hld_architecture.png)
-
-**Low-Level Design** — modules, key classes/interfaces, and the typed data contracts flowing between stages:
-
-![Low-Level Design](docs/lld_architecture.png)
 
 ## Tech stack
 
