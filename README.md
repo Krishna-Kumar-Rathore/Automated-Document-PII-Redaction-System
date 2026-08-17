@@ -2,7 +2,7 @@
 
 > Detects and redacts personally identifiable information (PII) from document images — Aadhaar cards, PAN cards, business cards, even newspaper scans — and maps every detected entity back to its exact pixel region for **auditable** redaction.
 
-![Status](https://img.shields.io/badge/status-in__development-orange)
+
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Platform](https://img.shields.io/badge/runs%20on-CPU%20(no%20GPU)-success)
 
