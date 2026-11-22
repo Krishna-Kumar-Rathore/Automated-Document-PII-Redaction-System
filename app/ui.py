@@ -25,7 +25,7 @@ import streamlit as st  # noqa: E402
 
 from app.config.loader import Config, load_config  # noqa: E402
 from app.pipeline.document_pipeline import DocumentPipeline  # noqa: E402
-from app.schemas.document import DONE  # noqa: E402
+from app.schemas.document import DONE, FAILED, SKIPPED  # noqa: E402
 from app.utils.logging import configure_logging  # noqa: E402
 from app.visualization.render import OUTPUT_TITLES, render_outputs  # noqa: E402
 
@@ -36,11 +36,12 @@ st.set_page_config(page_title="Document PII Redaction", page_icon="🛡️", lay
 
 # -- cached resources (shared across sessions: code + models only, no user data) --
 
-@st.cache_resource(show_spinner="Loading OCR models (first run only)...")
-def get_pipeline() -> tuple[Config, DocumentPipeline]:
+@st.cache_resource(show_spinner="Loading models (first run downloads the NER model, ~183 MB)...")
+def get_pipeline() -> tuple[Config, DocumentPipeline, str | None]:
     cfg = load_config()
     configure_logging(cfg.logging.get("level", "INFO"))
-    return cfg, DocumentPipeline(cfg=cfg)
+    pipeline = DocumentPipeline(cfg=cfg)
+    return cfg, pipeline, pipeline.warm_up()
 
 
 # -- helpers ----------------------------------------------------------------
@@ -68,6 +69,8 @@ def evidence(c) -> str:
         return f"score {a.get('score', 0):g}: " + ", ".join(parts)
     if "rule" in a:                                      # context rule
         return f"label '{a.get('keyword', '')}'"
+    if "prompt" in a:                                    # GLiNER
+        return f"NER prompt '{a['prompt']}'"
     return f"pattern {a.get('pattern', '')}"             # regex
 
 
@@ -83,7 +86,7 @@ def process(data: bytes, filename: str) -> dict | None:
         st.error("Could not read that file as an image. Please upload a JPG or PNG.")
         return None
 
-    cfg, pipeline = get_pipeline()
+    cfg, pipeline, _ = get_pipeline()
     with st.spinner("Running pipeline..."):
         result = pipeline.run_image(image, filename=filename)
         outputs = render_outputs(image, result, cfg)
@@ -99,6 +102,11 @@ def render_sidebar(result) -> None:
     for stage in result.stages:
         if stage.status == DONE:
             st.sidebar.markdown(f"✅ **{stage.name}** · Phase {stage.phase} · {stage.ms:.0f} ms")
+        elif stage.status == FAILED:
+            st.sidebar.markdown(f"❌ **{stage.name}** · Phase {stage.phase} · *failed*")
+            st.sidebar.caption(stage.note)
+        elif stage.status == SKIPPED:
+            st.sidebar.markdown(f"⏭️ {stage.name} · Phase {stage.phase} · *{stage.note}*")
         else:
             st.sidebar.markdown(f"⏳ {stage.name} · Phase {stage.phase} · *not built yet*")
 
@@ -124,10 +132,16 @@ def render_results(entry: dict) -> None:
                            file_name=f"{stem}.redacted.png", mime="image/png",
                            type="primary")
     else:
-        pending = ", ".join(f"{s.name} (Phase {s.phase})" for s in result.pending_stages)
-        st.info("The redacted image is generated only after the document passes "
-                f"through every pipeline stage. Not built yet: **{pending}**. "
-                "Intermediate outputs from the completed stages are shown below.")
+        failed = [s for s in result.pending_stages if s.status == FAILED]
+        pending = [s for s in result.pending_stages if s.status != FAILED]
+        if failed:
+            st.error("Stage failed, so no redacted image was produced: " + "; ".join(
+                f"**{s.name}**: {s.note}" for s in failed))
+        if pending:
+            names = ", ".join(f"{s.name} (Phase {s.phase})" for s in pending)
+            st.info("The redacted image is generated only after the document passes "
+                    f"through every pipeline stage. Not built yet: **{names}**. "
+                    "Intermediate outputs from the completed stages are shown below.")
 
     st.subheader(f"Detected PII candidates ({len(result.candidates)})")
     if result.candidates:
@@ -171,7 +185,11 @@ def main() -> None:
     st.caption("Upload a document image (ID card, form, letter, business card). "
                "It is processed in memory and never stored.")
 
-    cfg, _ = get_pipeline()
+    cfg, _, warmup_error = get_pipeline()
+    if warmup_error:
+        st.warning(f"The NER model could not be loaded ({warmup_error}). Documents will "
+                   "still be processed, but the NER stage will fail and no redacted "
+                   "image will be produced until this is fixed.")
     allowed = list(cfg.ui.get("allowed_types", ["jpg", "jpeg", "png"]))
     uploaded = st.file_uploader("Document image", type=allowed)
 

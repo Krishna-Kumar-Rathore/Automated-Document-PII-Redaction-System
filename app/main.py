@@ -58,8 +58,10 @@ def main() -> None:
 
     print(f"Lines / words   : {result.token_count} / {result.word_count}")
     print(f"Processing time : {result.processing_ms:.0f} ms")
+    marks = {"done": "x", "failed": "!", "skipped": "-"}
     for stage in result.stages:
-        print(f"  [{'x' if stage.status == 'done' else ' '}] Phase {stage.phase:<4} {stage.name}")
+        note = f"  ({stage.note})" if stage.note else ""
+        print(f"  [{marks.get(stage.status, ' ')}] Phase {stage.phase:<4} {stage.name}{note}")
     print(f"PII candidates  : {len(result.candidates)}")
     for c in result.candidates:
         check = {True: "valid", False: "INVALID"}.get(c.attributes.get("validated"), "")

@@ -184,6 +184,39 @@ context_rules:
                  "roll no", "enrollment no", "enrolment no", "id no"]
 
 # ---------------------------------------------------------------------------
+# NER model [PHASE 6]  GLiNER: entity labels are plain-English prompts chosen at
+# inference time, so the registry stays configurable.
+# Default: GLiNER small v2.1 (Apache-2.0), int8-quantised ONNX build - 183 MB
+# download vs 611 MB for the PyTorch weights, small enough for ~1 GB hosts.
+# Downloaded once into paths.models_dir on first use; offline afterwards.
+# ---------------------------------------------------------------------------
+ner:
+  enabled: true               # false -> stage reported as "skipped"
+  model_id: "onnx-community/gliner_small-v2.1"
+  onnx_file: "onnx/model_int8.onnx"   # null -> load PyTorch weights instead
+  threshold: 0.5              # drop model predictions below this score
+  max_words_per_chunk: 200    # GLiNER reads ~384 tokens; chunks split on rows
+  # GLiNER prompt -> registry label. Only what regex / rules handle poorly;
+  # structured fields (phone, email, IDs) are left to the regex detector.
+  # Prompt wording was compared on synthetic Indian addresses: "address" beat
+  # "street address" / "postal address" clearly on recall.
+  labels:
+    person: PERSON_NAME
+    address: ADDRESS
+    organization: ORGANIZATION
+  # Precision filters on model output (small models over-fire on titles/nouns):
+  require_capital_for: [PERSON_NAME, ORGANIZATION]   # drop "farmers" -> ORG
+  # A PERSON_NAME span made only of these words (plus names.stopwords) is a
+  # title, not a name: drop "The Prime Minister", keep "Minister Rao".
+  non_name_words: ["prime", "minister", "chief", "president", "vice", "chairman",
+                   "chairperson", "director", "manager", "officer", "secretary",
+                   "governor", "judge", "justice", "doctor", "professor", "sir",
+                   "madam", "mr", "mrs", "ms", "dr", "shri", "smt", "applicant",
+                   "candidate", "customer", "holder", "member", "head", "general",
+                   "deputy", "senior", "junior", "police", "commissioner",
+                   "collector", "inspector", "editor", "reporter", "spokesperson"]
+
+# ---------------------------------------------------------------------------
 # Entity resolution [PHASE 7]  (weights are tunable and eval-driven, not fixed)
 # ---------------------------------------------------------------------------
 resolver:

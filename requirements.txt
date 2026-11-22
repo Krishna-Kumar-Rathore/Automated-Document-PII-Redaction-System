@@ -1,11 +1,21 @@
 # Python 3.9 - 3.12 (rapidocr-onnxruntime does not support 3.13 yet)
 
-# Core pipeline (Phases 1-3)
+# CPU-only PyTorch index. Without it, Linux installs pull ~2 GB of CUDA
+# libraries that a CPU server never uses. (GLiNER needs torch even though the
+# model itself runs through ONNX Runtime.)
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# Core pipeline (Phases 1-5)
 rapidocr-onnxruntime>=1.3.0   # OCR: PP-OCR models via ONNX Runtime (CPU); models ship in the wheel
 opencv-python>=4.8.0          # preprocessing + visualization (rapidocr depends on the non-headless build;
                               # on Linux servers packages.txt installs libgl1 / libglib2.0-0 for it)
 numpy>=1.24.0
 PyYAML>=6.0
+
+# NER (Phase 6): GLiNER small, int8 ONNX (~183 MB, downloaded on first use)
+gliner>=0.2.26,<0.3
+torch==2.8.0+cpu ; sys_platform != "darwin"
+torch==2.8.0 ; sys_platform == "darwin"       # macOS wheels are CPU-only already
 
 # Web UI (Phase 9, started early)
 streamlit>=1.40.0
@@ -14,6 +24,5 @@ streamlit>=1.40.0
 pytest>=7.0
 
 # Later phases (added as we reach them):
-# gliner            # Phase 6 - configurable-label NER
 # fastapi, uvicorn  # optional API layer
-# presidio-analyzer # Phase 11 - eval benchmark baseline
+# presidio-analyzer # eval benchmark baseline

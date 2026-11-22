@@ -24,7 +24,7 @@ Every redaction can be traced back through this chain — which detector flagged
 | 3 | Text reconstruction (word tokens, char-offset ↔ token map) | ✅ Done |
 | 4 | Regex detection + format validators (email, phone, URL, UPI, date, Aadhaar, PAN, IFSC) | ✅ Done |
 | 5 | Name dictionary (trie, fuzzy) + context rules (Name:, Mr., S/O, DOB, A/c No., Aadhaar No.) | ✅ Done |
-| 6 | NER model (GLiNER) | ⏳ Next |
+| 6 | NER model: GLiNER small, int8 ONNX (person, address, organization) | ✅ Done |
 | 7 | Entity resolution + spatial mapping | ⏳ |
 | 8 | Redaction | ⏳ |
 | 9 | Streamlit UI | ✅ Started early: runs every built stage and shows its outputs |
@@ -56,7 +56,7 @@ This system aims to **detect PII reliably, redact it on the actual image, and ma
 | Component | Choice | Why |
 |---|---|---|
 | OCR | **RapidOCR + ONNX Runtime** (PP-OCR models) | Lightweight, CPU-fast, painless on Windows (sidesteps heavy PaddlePaddle setup) |
-| NER | **GLiNER** (ONNX) | Fast on CPU, and supports configurable labels at inference — fits the configurable entity registry |
+| NER | **GLiNER small v2.1**, int8 ONNX (183 MB) | Fast on CPU (~0.1 s per document), and labels are plain-English prompts chosen at inference time, which fits the configurable entity registry |
 | Structured detection | **Regex** + format validators | Aadhaar (Verhoeff checksum), PAN holder type, Indian mobile format, real calendar dates, known UPI handles: a pass boosts confidence, a fail lowers it, and nothing is dropped |
 | Name detection | **Custom Trie** | O(length) exact lookups over first / middle / last-name lists, plus edit-distance-1 fuzzy search with branch pruning for OCR slips |
 | Image ops | **OpenCV** | Preprocessing, annotation, redaction |
@@ -94,7 +94,7 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-> The OCR ONNX models ship inside the `rapidocr-onnxruntime` wheel, so nothing is downloaded at runtime. Everything runs fully offline.
+> **Models:** the OCR models ship inside the `rapidocr-onnxruntime` wheel. The NER model (GLiNER small, int8 ONNX, **186 MB**) downloads once on first use into `models/`, which git ignores. After that everything runs fully offline. `requirements.txt` installs the **CPU-only** PyTorch build, which GLiNER needs.
 
 ### Web UI
 
@@ -134,6 +134,8 @@ The repo already contains what the platform needs:
 - `.streamlit/config.toml`: 10 MB upload limit, usage telemetry off
 
 The same files work on any Docker or VM host: `streamlit run app/ui.py --server.port 8501`.
+
+> **Memory:** measured on the sample document, the pipeline uses about **630 MB** steady and **810 MB at peak** with all models loaded. Most of that is PyTorch, which GLiNER needs, rather than the model itself. Streamlit adds roughly 100–150 MB, so a 1 GB free host is tight. Use a host with 2 GB, or set `ner.enabled: false` (the NER stage is then reported as *skipped*).
 
 > **Privacy note for public deployments:** the app never stores uploads, but the document is still sent to the server that hosts it. For real ID documents, self-host it or keep it private.
 
@@ -190,6 +192,8 @@ tests/            unit tests
 - **OCR-tolerant numbers.** Numeric patterns run on a same-length "digit view" of the text that fixes common confusions (O→0, l→1, S→5, B→8), but only inside digit-heavy chunks. `9OOO0 l2345` is read as a phone number, while words like `BOSS` or `Oct` are left alone, and every match offset still points at the original text.
 - **Weighted name signals, not a raw count.** Explicit evidence (a `Name:` label, `Mr.`, `S/O`) scores 2 and a dictionary hit scores 1, with acceptance at 2 or more. `Name: Fooby Barbaz` is caught even though it isn't in any list, `Amit Kumar Sharma` is caught in free text from two dictionary hits, and `Rose Garden` or `Kiran Industries` (one hit) is not. `Company Name: Acme` is rejected by a qualifier list.
 - **Labels make generic numbers detectable.** A bare 12-digit number is too ambiguous to flag, but `A/c No. 1234 5678 9012` is clearly an account number. Context rules emit their own candidates, so a `DOB` date found by both regex and a context rule counts as agreement in the resolver.
+- **The NER model is a signal, not an oracle.** A small model over-fires: on a newspaper sentence it tagged `The Prime Minister` as a person and `farmers` as an organization. Two cheap filters (person or organization spans need a capital letter; a "person" made only of titles is dropped) removed both, while `Priya Nair` and `Tata Consultancy Services` were kept. Prompt wording was compared too: `address` beat `street address` and `postal address` on recall.
+- **Fail loudly, never silently.** If the NER model can't load (offline first run, out of memory), the stage is reported as *failed* with the reason, and no redacted image is produced. A redaction that quietly skipped a detector would look complete while leaking names.
 - **Formatting is evidence.** `080-23456789` and `08023456789` contain the same digits, but the grouping shows the first is a landline (STD code), so the phone validator checks grouping as well as digits.
 
 ## Evaluation

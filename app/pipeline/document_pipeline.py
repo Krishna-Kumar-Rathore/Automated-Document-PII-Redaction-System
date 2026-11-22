@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import cv2
 import numpy as np
@@ -17,11 +17,12 @@ import numpy as np
 from app.config.loader import Config, load_config
 from app.detection.context_detector import ContextRuleDetector
 from app.detection.name_detector import NameDetector
+from app.detection.ner_detector import NERDetector
 from app.detection.regex_detector import RegexDetector
 from app.ocr.engine import OCREngine, build_engine
 from app.preprocessing.preprocess import Preprocessor
-from app.schemas.document import (DONE, PIPELINE_STAGES, DocumentResult,
-                                  StageStatus)
+from app.schemas.document import (DONE, FAILED, PIPELINE_STAGES, SKIPPED,
+                                  DocumentResult, StageStatus)
 from app.schemas.ocr import ImageMeta
 from app.text.reconstruct import TextReconstructor
 from app.utils.logging import get_logger
@@ -35,7 +36,10 @@ def _ms_since(start: float) -> float:
 
 class DocumentPipeline:
     def __init__(self, cfg: Optional[Config] = None,
-                 engine: Optional[OCREngine] = None):
+                 engine: Optional[OCREngine] = None,
+                 ner_model: Optional[Any] = None):
+        """``engine`` / ``ner_model`` may be injected (tests, reuse); the NER
+        model otherwise loads lazily on first use or via ``warm_up()``."""
         self.cfg = cfg or load_config()
         self.preprocessor = Preprocessor(self.cfg)
         # Engine construction loads models, so allow injection (tests / reuse).
@@ -44,6 +48,19 @@ class DocumentPipeline:
         self.regex_detector = RegexDetector(self.cfg)
         self.name_detector = NameDetector(self.cfg)
         self.context_detector = ContextRuleDetector(self.cfg)
+        self.ner_detector = NERDetector(self.cfg, model=ner_model)
+
+    def warm_up(self) -> Optional[str]:
+        """Load lazy models up front. Returns an error message instead of raising,
+        so a UI can show it; the NER stage will then report FAILED per document."""
+        if not self.ner_detector.enabled:
+            return None
+        try:
+            self.ner_detector.load()
+            return None
+        except Exception as exc:
+            logger.error("NER warm-up failed: %s", exc)
+            return f"{type(exc).__name__}: {exc}"
 
     def run(self, image_path: str | Path) -> DocumentResult:
         """Convenience wrapper: read an image file and run the pipeline."""
@@ -98,7 +115,21 @@ class DocumentPipeline:
         result.candidates.extend(self.context_detector.detect(result.text))
         self._done(stages["detect_names"], t)
 
-        # -- Phases 6-8: NER -> resolve -> map -> redact (not built yet) -------
+        # -- Phase 6: NER (GLiNER) ---------------------------------------------
+        t = time.perf_counter()
+        ner_stage = stages["detect_ner"]
+        if not self.ner_detector.enabled:
+            ner_stage.status, ner_stage.note = SKIPPED, "disabled in config (ner.enabled)"
+        else:
+            try:
+                result.candidates.extend(self.ner_detector.detect(result.text))
+                self._done(ner_stage, t)
+            except Exception as exc:   # model missing / download failed / OOM
+                ner_stage.status, ner_stage.ms = FAILED, _ms_since(t)
+                ner_stage.note = f"{type(exc).__name__}: {exc}"
+                logger.error("NER stage failed: %s", ner_stage.note)
+
+        # -- Phases 7-8: resolve -> map -> redact (not built yet) ---------------
         # Detectors extend result.candidates; the resolver fills result.entities.
 
         result.processing_ms = _ms_since(wall)

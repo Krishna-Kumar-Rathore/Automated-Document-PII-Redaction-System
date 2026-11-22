@@ -28,7 +28,10 @@ PIPELINE_STAGES = [
     ("redact", "Redaction", "8"),
 ]
 
-DONE, PENDING = "done", "pending"
+DONE, PENDING, FAILED, SKIPPED = "done", "pending", "failed", "skipped"
+# A stage counts as "gone through" when it ran, or was deliberately switched off
+# in config. A pending (not built) or failed stage blocks the final output.
+_FINISHED = (DONE, SKIPPED)
 
 
 @dataclass
@@ -36,8 +39,9 @@ class StageStatus:
     key: str
     name: str
     phase: str
-    status: str = PENDING          # "done" | "pending"
+    status: str = PENDING          # done | pending | failed | skipped
     ms: Optional[float] = None
+    note: str = ""                 # failure reason / why skipped
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -64,12 +68,13 @@ class DocumentResult:
 
     @property
     def is_complete(self) -> bool:
-        """True only when every pipeline stage has run."""
-        return bool(self.stages) and all(s.status == DONE for s in self.stages)
+        """True only when every pipeline stage has run (or was disabled in config)."""
+        return bool(self.stages) and all(s.status in _FINISHED for s in self.stages)
 
     @property
     def pending_stages(self) -> List[StageStatus]:
-        return [s for s in self.stages if s.status != DONE]
+        """Stages blocking the final output: not built yet, or failed."""
+        return [s for s in self.stages if s.status not in _FINISHED]
 
     def to_dict(self) -> dict:
         return {
