@@ -108,13 +108,80 @@ regex:
 # Name detection [PHASE 5]
 # Tuned for PRECISION: a single trie hit is NOT enough (inputs may be newspapers
 # where many capitalised words are common nouns). Require agreement of signals.
+#
+# A "name run" is 1..max_tokens consecutive capitalised / ALL-CAPS words on one
+# row. Each run collects weighted signals; it is accepted when the summed score
+# reaches min_score. Explicit evidence (a "Name:" label, an honorific, S/O) is
+# strong; a dictionary hit is weak. So:
+#   "Name: Fooby Barbaz"  label(2)              = 2  -> accepted (unknown name)
+#   "Amit Kumar Sharma"   dict(1) + multi(1)    = 2  -> accepted (free text)
+#   "Rose Garden"         dict(1)               = 1  -> rejected
+#   "New Delhi"           -                     = 0  -> rejected
 # ---------------------------------------------------------------------------
 names:
   normalize: lowercase        # normalisation before trie lookup
-  min_signals: 2              # signals required to accept a name span
-  prefixes: ["mr", "mrs", "ms", "dr", "shri", "smt", "kumari"]
-  context_labels: ["name", "full name", "applicant name", "father name",
-                   "father's name", "candidate name"]
+  min_score: 2
+  signal_weights:
+    context_label: 2          # "Name:", "Father's Name", label on the row above
+    relation: 2               # "S/O", "D/O", "W/O", "C/O"
+    honorific: 2              # "Mr.", "Smt.", "Dr."
+    dictionary: 1             # >= 1 token found in the name lists
+    dictionary_multi: 1       # >= 2 tokens found (independent second hit)
+  confidence_base: 0.5        # confidence = base + per_point * score (cap 0.99)
+  confidence_per_point: 0.12
+  max_tokens: 4               # longer capitalised runs are headings, not names
+  fuzzy_min_length: 5         # tokens this long may match a list name at edit
+                              # distance 1 (OCR: "Sharna" -> "Sharma")
+  prefixes: ["mr", "mrs", "ms", "miss", "dr", "shri", "shree", "smt", "sri",
+             "kumari", "km", "prof", "late"]
+  relation_markers: ["s/o", "d/o", "w/o", "c/o", "son of", "daughter of",
+                     "wife of", "husband of", "care of"]
+  context_labels: ["name", "full name", "applicant name", "applicant's name",
+                   "name of applicant", "father name", "father's name",
+                   "mother name", "mother's name", "husband's name",
+                   "spouse name", "guardian name", "candidate name",
+                   "holder name", "card holder", "account holder",
+                   "customer name", "employee name", "student name",
+                   "patient name", "nominee", "nominee name"]
+  # "<qualifier> Name:" is NOT a person: "Company Name: Acme Corp".
+  non_person_qualifiers: ["company", "business", "firm", "bank", "branch",
+                          "school", "college", "university", "institute",
+                          "organisation", "organization", "shop", "store",
+                          "product", "file", "user", "brand", "project",
+                          "domain", "host", "device", "village", "city",
+                          "district", "state", "street", "building"]
+  # Capitalised small words that never start or continue a name run.
+  stopwords: ["of", "the", "and", "for", "to", "in", "on", "at", "by", "with",
+              "from", "a", "an", "or", "is", "are", "was", "dear", "sir",
+              "madam", "india", "government", "republic"]
+
+# ---------------------------------------------------------------------------
+# Context rules [PHASE 5]: "<label> <value>" fields on the same row.
+# Emits candidates with detector="context_rule"; when they coincide with a regex
+# candidate (e.g. a DOB date) the resolver treats that as agreement.
+# value kinds (patterns in code): date, year, account, id
+# ---------------------------------------------------------------------------
+context_rules:
+  confidence: 0.80
+  fields:
+    - label: DATE
+      value: date
+      keywords: ["dob", "d.o.b", "date of birth", "birth date", "born on"]
+    - label: DATE
+      value: year
+      keywords: ["yob", "year of birth"]
+    - label: ACCOUNT_NUMBER
+      value: account
+      keywords: ["a/c no", "a/c number", "a/c", "account no", "account number",
+                 "acct no", "bank account", "account"]
+    - label: ID_NUMBER
+      value: id
+      keywords: ["aadhaar no", "aadhaar number", "aadhaar", "aadhar", "uid",
+                 "vid", "pan no", "pan number", "pan", "passport no",
+                 "passport number", "passport", "voter id", "epic no",
+                 "dl no", "driving licence no", "driving license no",
+                 "licence no", "license no", "employee id", "emp id",
+                 "roll no", "enrollment no", "enrolment no", "id no"]
 
 # ---------------------------------------------------------------------------
 # Entity resolution [PHASE 7]  (weights are tunable and eval-driven, not fixed)

@@ -1,5 +1,21 @@
+# Common middle names (one per line, case-insensitive; '#' starts a comment).
 Kumar
+Kumari
 Devi
 Prasad
 Nath
 Lal
+Chand
+Bhai
+Ben
+Rani
+Bai
+Singh
+Kaur
+Mohan
+Ram
+Raj
+Chandra
+Shankar
+Narayan
+Prakash

@@ -59,6 +59,18 @@ def to_png(img: np.ndarray) -> bytes:
     return buf.tobytes() if ok else b""
 
 
+def evidence(c) -> str:
+    """One-line, human-readable reason a detector flagged this candidate."""
+    a = c.attributes
+    if "signals" in a:                                   # name detector
+        parts = [f"{s} ({a['keyword']})" if s in ("context_label", "relation", "honorific")
+                 and a.get("keyword") else s for s in a["signals"]]
+        return f"score {a.get('score', 0):g}: " + ", ".join(parts)
+    if "rule" in a:                                      # context rule
+        return f"label '{a.get('keyword', '')}'"
+    return f"pattern {a.get('pattern', '')}"             # regex
+
+
 def process(data: bytes, filename: str) -> dict | None:
     """Run the pipeline once per distinct upload; cache in this session only."""
     key = hashlib.sha256(data).hexdigest()
@@ -126,7 +138,7 @@ def render_results(entry: dict) -> None:
             "text": c.text,
             "confidence": c.confidence,
             "detector": c.detector,
-            "pattern": c.attributes.get("pattern", ""),
+            "evidence": evidence(c),
             "validated": {True: "✅ pass", False: "❌ fail"}.get(
                 c.attributes.get("validated"), "—"),
             "OCR-corrected": c.attributes.get("ocr_corrected", ""),

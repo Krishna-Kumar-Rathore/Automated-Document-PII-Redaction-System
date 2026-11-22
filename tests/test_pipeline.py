@@ -42,7 +42,8 @@ def blank(w=400, h=200):
 def test_pipeline_runs_implemented_stages_and_reports_pending(cfg):
     result = DocumentPipeline(cfg=cfg, engine=FakeEngine()).run_image(blank(), "doc.png")
     done = [s.key for s in result.stages if s.status == "done"]
-    assert done == ["preprocess", "ocr", "reconstruct", "detect_regex"]
+    assert done == ["preprocess", "ocr", "reconstruct", "detect_regex", "detect_names"]
+    assert [c.text for c in result.candidates if c.label == "PERSON_NAME"] == ["Amit Sharma"]
     phone = [c for c in result.candidates if c.label == "PHONE_NUMBER"]
     assert [c.text for c in phone] == ["9000000000"]
     assert result.to_dict()["candidates"][0]["detector"] == "regex"

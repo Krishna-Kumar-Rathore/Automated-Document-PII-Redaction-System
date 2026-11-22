@@ -63,7 +63,7 @@ def main() -> None:
     print(f"PII candidates  : {len(result.candidates)}")
     for c in result.candidates:
         check = {True: "valid", False: "INVALID"}.get(c.attributes.get("validated"), "")
-        print(f"  {c.label:<13} {c.confidence:.2f}  {c.text!r}  {check}")
+        print(f"  {c.label:<14} {c.confidence:.2f}  {c.detector:<12} {c.text!r}  {check}")
     if not result.is_complete:
         print("Redacted image  : not produced - pipeline incomplete")
     for path in written:

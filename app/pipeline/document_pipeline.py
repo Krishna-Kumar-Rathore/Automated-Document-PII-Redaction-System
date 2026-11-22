@@ -15,6 +15,8 @@ import cv2
 import numpy as np
 
 from app.config.loader import Config, load_config
+from app.detection.context_detector import ContextRuleDetector
+from app.detection.name_detector import NameDetector
 from app.detection.regex_detector import RegexDetector
 from app.ocr.engine import OCREngine, build_engine
 from app.preprocessing.preprocess import Preprocessor
@@ -40,6 +42,8 @@ class DocumentPipeline:
         self.engine = engine or build_engine(self.cfg)
         self.reconstructor = TextReconstructor(self.cfg)
         self.regex_detector = RegexDetector(self.cfg)
+        self.name_detector = NameDetector(self.cfg)
+        self.context_detector = ContextRuleDetector(self.cfg)
 
     def run(self, image_path: str | Path) -> DocumentResult:
         """Convenience wrapper: read an image file and run the pipeline."""
@@ -88,7 +92,13 @@ class DocumentPipeline:
         result.candidates.extend(self.regex_detector.detect(result.text))
         self._done(stages["detect_regex"], t)
 
-        # -- Phases 5-8: names -> NER -> resolve -> map -> redact (not built) --
+        # -- Phase 5: name dictionary + context rules -------------------------
+        t = time.perf_counter()
+        result.candidates.extend(self.name_detector.detect(result.text))
+        result.candidates.extend(self.context_detector.detect(result.text))
+        self._done(stages["detect_names"], t)
+
+        # -- Phases 6-8: NER -> resolve -> map -> redact (not built yet) -------
         # Detectors extend result.candidates; the resolver fills result.entities.
 
         result.processing_ms = _ms_since(wall)

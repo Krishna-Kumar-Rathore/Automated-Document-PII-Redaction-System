@@ -23,8 +23,8 @@ Every redaction can be traced back through this chain — which detector flagged
 | 1–2 | Preprocessing + OCR | ✅ Done |
 | 3 | Text reconstruction (word tokens, char-offset ↔ token map) | ✅ Done |
 | 4 | Regex detection + format validators (email, phone, URL, UPI, date, Aadhaar, PAN, IFSC) | ✅ Done |
-| 5 | Name dictionary (trie) + context rules | ⏳ Next |
-| 6 | NER model (GLiNER) | ⏳ |
+| 5 | Name dictionary (trie, fuzzy) + context rules (Name:, Mr., S/O, DOB, A/c No., Aadhaar No.) | ✅ Done |
+| 6 | NER model (GLiNER) | ⏳ Next |
 | 7 | Entity resolution + spatial mapping | ⏳ |
 | 8 | Redaction | ⏳ |
 | 9 | Streamlit UI | ✅ Started early: runs every built stage and shows its outputs |
@@ -58,7 +58,7 @@ This system aims to **detect PII reliably, redact it on the actual image, and ma
 | OCR | **RapidOCR + ONNX Runtime** (PP-OCR models) | Lightweight, CPU-fast, painless on Windows (sidesteps heavy PaddlePaddle setup) |
 | NER | **GLiNER** (ONNX) | Fast on CPU, and supports configurable labels at inference — fits the configurable entity registry |
 | Structured detection | **Regex** + format validators | Aadhaar (Verhoeff checksum), PAN holder type, Indian mobile format, real calendar dates, known UPI handles: a pass boosts confidence, a fail lowers it, and nothing is dropped |
-| Name detection | **Custom Trie** | O(length) lookups over first / middle / last-name lists |
+| Name detection | **Custom Trie** | O(length) exact lookups over first / middle / last-name lists, plus edit-distance-1 fuzzy search with branch pruning for OCR slips |
 | Image ops | **OpenCV** | Preprocessing, annotation, redaction |
 | Config | **YAML** | Single source of truth for all tunables |
 | UI | **Streamlit** (FastAPI optional later) | Fast demo UI, backend kept separable |
@@ -168,7 +168,8 @@ app/
   preprocessing/  deskew / denoise / scale with coordinate tracking
   ocr/            OCREngine interface + RapidOCR implementation
   text/           Phase 3 text reconstruction (reading order, word boxes, offset map)
-  detection/      Detector interface, Phase 4 regex detector + format validators
+  detection/      Detector interface; regex + validators (Phase 4);
+                  name trie, name detector, context rules (Phase 5)
   visualization/  output image rendering (line/word boxes, entities, redaction)
   pipeline/       DocumentPipeline: runs every stage, reports pending ones
   main.py         CLI entrypoint
@@ -187,6 +188,8 @@ tests/            unit tests
 - **Coordinate correctness.** All preprocessing transforms are composed into one affine matrix and inverted, so boxes always map to the original image.
 - **Validators boost, never gate.** OCR can misread one digit of a genuine Aadhaar number. Dropping it on a failed checksum would leak it, so a failed check only lowers confidence and the resolver decides.
 - **OCR-tolerant numbers.** Numeric patterns run on a same-length "digit view" of the text that fixes common confusions (O→0, l→1, S→5, B→8), but only inside digit-heavy chunks. `9OOO0 l2345` is read as a phone number, while words like `BOSS` or `Oct` are left alone, and every match offset still points at the original text.
+- **Weighted name signals, not a raw count.** Explicit evidence (a `Name:` label, `Mr.`, `S/O`) scores 2 and a dictionary hit scores 1, with acceptance at 2 or more. `Name: Fooby Barbaz` is caught even though it isn't in any list, `Amit Kumar Sharma` is caught in free text from two dictionary hits, and `Rose Garden` or `Kiran Industries` (one hit) is not. `Company Name: Acme` is rejected by a qualifier list.
+- **Labels make generic numbers detectable.** A bare 12-digit number is too ambiguous to flag, but `A/c No. 1234 5678 9012` is clearly an account number. Context rules emit their own candidates, so a `DOB` date found by both regex and a context rule counts as agreement in the resolver.
 - **Formatting is evidence.** `080-23456789` and `08023456789` contain the same digits, but the grouping shows the first is a landline (STD code), so the phone validator checks grouping as well as digits.
 
 ## Evaluation
