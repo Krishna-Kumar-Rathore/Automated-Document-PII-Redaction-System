@@ -111,6 +111,32 @@ def render_sidebar(result) -> None:
             st.sidebar.markdown(f"⏳ {stage.name} · Phase {stage.phase} · *not built yet*")
 
 
+def render_redaction_checks(result) -> None:
+    """Pixel check, OCR leak check, and what was deliberately left visible."""
+    r = result.redaction
+    lc = r.get("leak_check", {})
+    kept = r.get("kept_visible", [])
+    msg = (f"**{r['redacted']}** entities redacted ({r['style']} fill). "
+           + ("Pixel check passed: every box is fully opaque. "
+              if r["pixel_check_passed"] else ""))
+    if not r["pixel_check_passed"]:
+        st.error("Pixel check FAILED: some redaction boxes are not fully opaque. "
+                 "Do not use this image.")
+    if lc.get("ran") and lc["passed"]:
+        st.success(msg + "OCR leak check passed: none of the redacted text can be read "
+                   "from the output image.")
+    elif lc.get("ran"):
+        st.error(msg + "OCR leak check found text that is still readable. Review before "
+                 "sharing: " + "; ".join(
+                     f"#{l['entity_id']} {l['label']} ({l['match']}: "
+                     f"{', '.join(l['readable'])})" for l in lc["leaks"]))
+    else:
+        st.info(msg + "OCR leak check is turned off (redaction.leak_check).")
+    if kept:
+        st.caption("Detected but left visible by policy (redaction.labels): " + ", ".join(
+            f"#{k['entity_id']} {k['label']}" for k in kept))
+
+
 def render_results(entry: dict) -> None:
     image, result, outputs = entry["image"], entry["result"], entry["outputs"]
     stem = result.document_id
@@ -131,6 +157,7 @@ def render_results(entry: dict) -> None:
         st.download_button("Download redacted image", to_png(outputs["redacted"]),
                            file_name=f"{stem}.redacted.png", mime="image/png",
                            type="primary")
+        render_redaction_checks(result)
     else:
         failed = [s for s in result.pending_stages if s.status == FAILED]
         pending = [s for s in result.pending_stages if s.status != FAILED]
@@ -153,6 +180,7 @@ def render_results(entry: dict) -> None:
             "text": e.text.replace("\n", " ⏎ "),
             "confidence": e.confidence,
             "detectors": " + ".join(e.detectors),
+            "redacted": "⬛ yes" if e.attributes.get("redacted") else "visible",
             "boxes": len(e.bboxes),
             "notes": "; ".join(filter(None, [
                 f"merged {len(e.attributes['merged_from'])} pieces"

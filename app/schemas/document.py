@@ -9,7 +9,7 @@ resolution.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from .entities import EntityCandidate, ResolvedEntity
 from .ocr import ImageMeta, OCRToken
@@ -57,6 +57,9 @@ class DocumentResult:
     entities: List[ResolvedEntity] = field(default_factory=list)     # after resolution
     stages: List[StageStatus] = field(default_factory=list)
     processing_ms: Optional[float] = None
+    # Phase 8. The image itself is never serialised into result.json.
+    redacted_image: Optional[Any] = field(default=None, repr=False)
+    redaction: Dict[str, Any] = field(default_factory=dict)          # summary + leak check
 
     @property
     def token_count(self) -> int:
@@ -87,4 +90,5 @@ class DocumentResult:
             "text": self.text.to_dict() if self.text else None,
             "candidates": [c.to_dict() for c in self.candidates],
             "entities": [e.to_dict() for e in self.entities],
+            "redaction": self.redaction,
         }

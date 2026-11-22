@@ -27,7 +27,6 @@ class VizStyle:
     word_color: Color
     class_colors: Dict[str, Color]
     default_color: Color
-    redaction_fill: Color
 
     @classmethod
     def from_config(cls, config: Config) -> "VizStyle":
@@ -41,7 +40,6 @@ class VizStyle:
             word_color=tuple(v.get("ocr_word_color", [200, 120, 0])),
             class_colors={k: tuple(c) for k, c in (v.get("colors") or {}).items()},
             default_color=default,
-            redaction_fill=tuple(v.get("redaction_fill", [0, 0, 0])),
         )
 
 
@@ -84,15 +82,6 @@ def draw_entities(image: np.ndarray, entities: Sequence[ResolvedEntity],
     return canvas
 
 
-def redact(image: np.ndarray, entities: Sequence[ResolvedEntity],
-           style: VizStyle) -> np.ndarray:
-    """Opaque fill over every entity box - true redaction, not a blur."""
-    canvas = image.copy()
-    for ent in entities:
-        for x1, y1, x2, y2 in ent.bboxes:
-            cv2.rectangle(canvas, (x1, y1), (x2, y2), style.redaction_fill, -1)
-    return canvas
-
 
 def render_outputs(image: np.ndarray, result: DocumentResult,
                    cfg: Config) -> Dict[str, np.ndarray]:
@@ -108,13 +97,13 @@ def render_outputs(image: np.ndarray, result: DocumentResult,
                                            style, show_conf=False, use_polygon=True)
     if any(s.key == "map" and s.status == DONE for s in result.stages):
         outputs["entities"] = draw_entities(image, result.entities, style)
-    if result.is_complete:
-        outputs["redacted"] = redact(image, result.entities, style)
+    if result.is_complete and result.redacted_image is not None:
+        outputs["redacted"] = result.redacted_image
     return outputs
 
 
 OUTPUT_TITLES: Dict[str, str] = {
-    "redacted": "Redacted image",
+    "redacted": "Redacted image (Phase 8)",
     "entities": "Final entities (Phase 7)",
     "ocr_words": "Word boxes (Phase 3)",
     "ocr_lines": "OCR line boxes (Phase 2)",

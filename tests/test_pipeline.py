@@ -61,7 +61,7 @@ def test_pipeline_runs_implemented_stages_and_reports_pending(cfg):
     result = make_pipeline(cfg).run_image(blank(), "doc.png")
     done = [s.key for s in result.stages if s.status == "done"]
     assert done == ["preprocess", "ocr", "reconstruct", "detect_regex", "detect_names",
-                    "detect_ner", "resolve", "map"]
+                    "detect_ner", "resolve", "map", "redact"]
     ents = {(e.label, e.text) for e in result.entities}
     assert ("PERSON_NAME", "Amit Sharma") in ents and ("PHONE_NUMBER", "9000000000") in ents
     assert all(e.bboxes for e in result.entities)
@@ -70,21 +70,22 @@ def test_pipeline_runs_implemented_stages_and_reports_pending(cfg):
     phone = [c for c in result.candidates if c.label == "PHONE_NUMBER"]
     assert [c.text for c in phone] == ["9000000000"]
     assert result.to_dict()["candidates"][0]["detector"] == "regex"
-    assert not result.is_complete
+    assert result.is_complete
     assert result.word_count == 5      # Name: / Amit / Sharma / Phone: / 9000000000
     assert result.text.full_text == "Name: Amit Sharma\nPhone: 9000000000"
     d = result.to_dict()
-    assert d["pipeline_complete"] is False and d["text"]["words"][0]["start"] == 0
+    assert d["pipeline_complete"] is True and d["text"]["words"][0]["start"] == 0
+    assert "redacted_image" not in d and d["redaction"]["redacted"] >= 1
 
 
 def test_redacted_output_only_when_pipeline_complete(cfg):
     image = blank()
     result = make_pipeline(cfg).run_image(image, "doc.png")
-    outputs = render_outputs(image, result, cfg)
-    assert set(outputs) == {"ocr_lines", "ocr_words", "entities"}   # no "redacted" yet
-    for s in result.stages:          # simulate a future, fully-built pipeline
-        s.status = "done"
-    assert "redacted" in render_outputs(image, result, cfg)
+    assert result.is_complete                                  # every stage now built
+    assert set(render_outputs(image, result, cfg)) == {"ocr_lines", "ocr_words",
+                                                       "entities", "redacted"}
+    result.stages[-1].status = "pending"                       # any unfinished stage...
+    assert "redacted" not in render_outputs(image, result, cfg)  # ...withholds it
 
 
 def test_pipeline_accepts_grayscale(cfg):

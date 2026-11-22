@@ -292,7 +292,36 @@ visualization:
     ORGANIZATION:  [200, 120, 0]
     OTHER_PII:     [128, 128, 128]
   default_color: [128, 128, 128]
-  redaction_fill: [0, 0, 0]   # opaque black for true redaction
+
+# ---------------------------------------------------------------------------
+# Redaction [PHASE 8]
+# True redaction: entity boxes are overwritten with opaque pixels (never a blur
+# or a translucent overlay, which can be reversed). Output files are written by
+# OpenCV, which does not copy EXIF / metadata from the input.
+# ---------------------------------------------------------------------------
+redaction:
+  # Labels that get blacked out. ORGANIZATION is detected and shown in the
+  # annotated image but left visible: "GOVERNMENT OF INDIA" is not personal data.
+  labels: [PERSON_NAME, PHONE_NUMBER, EMAIL, URL, UPI_ID, ADDRESS, DATE,
+           ID_NUMBER, ACCOUNT_NUMBER, OTHER_PII]
+  style: "solid"              # "solid" | "labeled" (black box + "[NAME]" text)
+  fill: [0, 0, 0]             # BGR
+  label_text_color: [255, 255, 255]
+  label_names:                # text used by style "labeled"
+    PERSON_NAME: NAME
+    PHONE_NUMBER: PHONE
+    EMAIL: EMAIL
+    URL: URL
+    UPI_ID: UPI
+    ADDRESS: ADDRESS
+    DATE: DATE
+    ID_NUMBER: ID
+    ACCOUNT_NUMBER: ACCOUNT
+    OTHER_PII: REDACTED
+  # After redacting, OCR the redacted image again and report any redacted entity
+  # whose text is still readable (e.g. a mis-placed box). Costs one extra OCR pass.
+  leak_check: true
+  leak_check_min_chars: 4     # ignore very short entities (too many chance hits)
 
 # ---------------------------------------------------------------------------
 # Web UI [PHASE 9]  (upload size limit itself lives in .streamlit/config.toml)

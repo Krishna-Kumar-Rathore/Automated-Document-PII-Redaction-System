@@ -21,6 +21,7 @@ from app.detection.ner_detector import NERDetector
 from app.detection.regex_detector import RegexDetector
 from app.mapping.spatial import SpatialMapper
 from app.ocr.engine import OCREngine, build_engine
+from app.redaction.redactor import Redactor
 from app.resolution.resolver import EntityResolver
 from app.preprocessing.preprocess import Preprocessor
 from app.schemas.document import (DONE, FAILED, PIPELINE_STAGES, SKIPPED,
@@ -53,6 +54,7 @@ class DocumentPipeline:
         self.ner_detector = NERDetector(self.cfg, model=ner_model)
         self.resolver = EntityResolver(self.cfg)
         self.mapper = SpatialMapper(self.cfg)
+        self.redactor = Redactor(self.cfg)
 
     def warm_up(self) -> Optional[str]:
         """Load lazy models up front. Returns an error message instead of raising,
@@ -142,7 +144,17 @@ class DocumentPipeline:
         self.mapper.map(result.entities, result.text, (w0, h0))
         self._done(stages["map"], t)
 
-        # -- Phase 8: redaction (not built yet) --------------------------------
+        # -- Phase 8: redaction + verification --------------------------------
+        # A failed upstream stage means detections may be missing: refuse to
+        # produce a redacted image that would look complete but could leak.
+        failed = [s.name for s in result.stages if s.status == FAILED]
+        if failed:
+            stages["redact"].note = "blocked: " + ", ".join(failed) + " failed"
+        else:
+            t = time.perf_counter()
+            result.redacted_image = self.redactor.apply(image, result.entities)
+            result.redaction = self._summarise_redaction(result)
+            self._done(stages["redact"], t)
         # Detectors extend result.candidates; the resolver fills result.entities.
 
         result.processing_ms = _ms_since(wall)
@@ -152,6 +164,32 @@ class DocumentPipeline:
                     len(result.candidates), len(result.entities), result.processing_ms,
                     ", ".join(pending) or "none")
         return result
+
+    def _summarise_redaction(self, result: DocumentResult) -> dict:
+        ents = result.entities
+        redacted = [e for e in ents if e.attributes.get("redacted")]
+        summary = {
+            "style": self.redactor.style,
+            "labels": sorted(self.redactor.labels),
+            "redacted": len(redacted),
+            "kept_visible": [{"entity_id": e.entity_id, "label": e.label,
+                              "reason": e.attributes.get("reason", "")}
+                             for e in ents if not e.attributes.get("redacted")],
+            "pixel_check_passed": all(e.attributes.get("verified") for e in redacted),
+        }
+        if self.redactor.leak_check and redacted:
+            t = time.perf_counter()
+            pre = self.preprocessor.run(result.redacted_image)
+            tokens, _ = self.engine.detect(pre.image, pre.transform, pre.original_size)
+            leaks = self.redactor.find_leaks(redacted, " ".join(tok.text for tok in tokens))
+            summary["leak_check"] = {"ran": True, "passed": not leaks, "leaks": leaks,
+                                     "ms": _ms_since(t)}
+            if leaks:
+                logger.error("LEAK CHECK: %d redacted entities still readable: %s",
+                             len(leaks), [l["text"] for l in leaks])
+        else:
+            summary["leak_check"] = {"ran": False}
+        return summary
 
     @staticmethod
     def _done(stage: StageStatus, started: float) -> None:

@@ -44,6 +44,11 @@ def main() -> None:
         raise SystemExit(f"Could not read image: {args.image}")
 
     pipeline = DocumentPipeline(cfg=cfg)
+    # Load lazy models first so "Processing time" measures the document, not the
+    # one-off model load. A load error is reported by the NER stage itself.
+    warmup_error = pipeline.warm_up()
+    if warmup_error:
+        print(f"Warning: NER model failed to load ({warmup_error})")
     result = pipeline.run_image(image, filename=Path(args.image).name)
 
     stem = result.document_id
@@ -72,6 +77,17 @@ def main() -> None:
               f"boxes={e.bboxes}  by={'+'.join(e.detectors)}")
     if not result.is_complete:
         print("Redacted image  : not produced - pipeline incomplete")
+    else:
+        r = result.redaction
+        lc = r.get("leak_check", {})
+        print(f"Redaction       : {r['redacted']} entities ({r['style']}); "
+              f"pixel check {'passed' if r['pixel_check_passed'] else 'FAILED'}; "
+              f"leak check {'skipped' if not lc.get('ran') else 'passed' if lc['passed'] else 'FAILED'}")
+        for k in r["kept_visible"]:
+            print(f"  kept visible  : #{k['entity_id']} {k['label']} ({k['reason']})")
+        for leak in lc.get("leaks", []):
+            print(f"  ! LEAK ({leak['match']}): #{leak['entity_id']} {leak['label']} "
+                  f"readable: {leak['readable']}")
     for path in written:
         print(f"Wrote           : {path}")
 

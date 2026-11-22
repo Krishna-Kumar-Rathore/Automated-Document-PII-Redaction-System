@@ -26,10 +26,14 @@ Every redaction can be traced back through this chain — which detector flagged
 | 5 | Name dictionary (trie, fuzzy) + context rules (Name:, Mr., S/O, DOB, A/c No., Aadhaar No.) | ✅ Done |
 | 6 | NER model: GLiNER small, int8 ONNX (person, address, organization) | ✅ Done |
 | 7 | Entity resolution (noisy-OR scoring, address merging, overlap handling) + spatial mapping (sub-word, one box per line) | ✅ Done |
-| 8 | Redaction | ⏳ |
-| 9 | Streamlit UI | ✅ Started early: runs every built stage and shows its outputs |
+| 8 | Redaction: opaque fill by label policy, pixel check, OCR leak check | ✅ Done |
+| 9 | Streamlit UI | ✅ Upload → redacted image, entity table, safety checks, downloads |
 
-The redacted image is produced **only after a document passes through every stage**. Until then, the CLI and UI show the intermediate outputs of the stages that are built.
+The redacted image is produced **only after a document passes through every stage**. If any stage fails (for example, the NER model cannot load), no redacted image is produced at all.
+
+| Original | Redacted |
+|---|---|
+| ![original](sample.jpg) | ![redacted](docs/sample.redacted.jpg) |
 
 ---
 
@@ -102,7 +106,7 @@ pip install -r requirements.txt
 streamlit run app/ui.py
 ```
 
-Upload a JPG/PNG (or click **try the synthetic sample**). The page shows each pipeline stage's status and timing, the output images from the completed stages (line boxes, word boxes), the reconstructed text, and a downloadable `result.json`. The **redacted image** appears once every stage is implemented. Uploads are processed in memory and never written to disk.
+Upload a JPG/PNG (or click **try the synthetic sample**). The page shows the **original and redacted images side by side** with a download button, the results of the pixel check and OCR leak check, a table of final entities (what was redacted, what was left visible and why), each stage's status and timing, and the intermediate images (line boxes, word boxes, annotated entities). The raw detector evidence and a downloadable `result.json` are there too. Uploads are processed in memory and never written to disk.
 
 ### Command line
 
@@ -111,10 +115,11 @@ python -m app.main --image sample.jpg            # --outdir defaults to paths.ou
 ```
 
 This produces:
-- `outputs/sample.result.json`: stage statuses, OCR lines, reconstructed text, word tokens, entities
+- `outputs/sample.result.json`: the full audit trail (stage statuses, OCR lines, words, every detector candidate, final entities with evidence and boxes, redaction summary, leak check)
 - `outputs/sample.ocr_lines.jpg`: OCR line boxes
 - `outputs/sample.ocr_words.jpg`: word boxes from text reconstruction
-- `outputs/sample.redacted.jpg`: only once the full pipeline is built
+- `outputs/sample.entities.jpg`: final entities annotated with label and confidence
+- `outputs/sample.redacted.jpg`: **the redacted document**
 
 ### Running tests
 
@@ -174,6 +179,7 @@ app/
                   name trie, name detector, context rules (Phase 5); GLiNER (Phase 6)
   resolution/     EntityResolver: candidates -> final entities (Phase 7)
   mapping/        SpatialMapper: entity spans -> per-line pixel boxes (Phase 7)
+  redaction/      Redactor: policy, opaque fill, pixel check, leak check (Phase 8)
   visualization/  output image rendering (line/word boxes, entities, redaction)
   pipeline/       DocumentPipeline: runs every stage, reports pending ones
   main.py         CLI entrypoint
@@ -193,6 +199,8 @@ tests/            unit tests
 - **Partial overlaps keep both entities.** When two labels overlap, the loser is dropped only if it is mostly covered by the winner, and it is recorded on the winner. Dropping a partly overlapping entity would leave its uncovered part unredacted.
 - **Addresses: a model *and* a rule.** In testing, GLiNER tagged only `House No 45`, `Sector 12` from a two-line address and missed `Dwarka, New Delhi 110075`. The resolver joins adjacent address pieces (absorbing building names and a trailing PIN), and an `Address:` context rule claims continuation rows up to the next `Label:` row. Together they covered the whole address, at 0.77 with one box per line.
 - **Sub-word boxes.** OCR often merges a label and value (`DOB:01/01/1990` is one token). The mapper slices partly covered words with the same glyph-width model used for word boxes, so only the date is boxed. Boxes are padded 2 px, because over-covering by a few pixels is safe and under-covering leaks.
+- **Redaction is verified, not assumed.** Boxes are filled with opaque pixels (never blurred, which can be reversed). Every box is then re-read to confirm it is 100% fill colour, and the redacted image is **OCR'd again** to confirm none of the redacted text, or any meaningful part of it, can still be read. A misplaced box shows up as a reported leak instead of a silent one.
+- **Policy is separate from detection.** Organizations are detected and shown in the annotated image but left visible by default (`GOVERNMENT OF INDIA` is not personal data). Which labels get redacted is a config list, and every entity records whether it was redacted and why.
 - **Coordinate correctness.** All preprocessing transforms are composed into one affine matrix and inverted, so boxes always map to the original image.
 - **Validators boost, never gate.** OCR can misread one digit of a genuine Aadhaar number. Dropping it on a failed checksum would leak it, so a failed check only lowers confidence and the resolver decides.
 - **OCR-tolerant numbers.** Numeric patterns run on a same-length "digit view" of the text that fixes common confusions (O→0, l→1, S→5, B→8), but only inside digit-heavy chunks. `9OOO0 l2345` is read as a phone number, while words like `BOSS` or `Oct` are left alone, and every match offset still points at the original text.
