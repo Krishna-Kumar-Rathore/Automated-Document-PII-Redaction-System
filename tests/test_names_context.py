@@ -151,3 +151,19 @@ def test_id_value_stops_before_next_label(context):
 
 def test_context_never_crosses_rows(context):
     assert detect(context, "Account Holder", "9876 5432 1098") == []
+
+
+def test_address_block_spans_continuation_rows_until_next_label(context):
+    cands = detect(context, "Name: Priya Nair", "Address: House No 45, Sector 12,",
+                   "Dwarka, New Delhi 110075", "Mobile: 98765 43210")
+    assert texts(cands, "ADDRESS") == ["House No 45, Sector 12,\nDwarka, New Delhi 110075"]
+
+
+def test_address_block_respects_row_limit_and_blank_rows(context):
+    rows = ["Address: Line one"] + [f"Line {n}" for n in ("two", "three", "four", "five", "six")]
+    [addr] = [c for c in detect(context, *rows) if c.label == "ADDRESS"]
+    assert addr.text.count("\n") == 3                     # label row + 3 extra rows
+
+
+def test_email_address_label_is_not_a_postal_address(context):
+    assert texts(detect(context, "Email Address: a.b@example.com"), "ADDRESS") == []

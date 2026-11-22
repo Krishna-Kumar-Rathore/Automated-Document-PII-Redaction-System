@@ -143,22 +143,42 @@ def render_results(entry: dict) -> None:
                     f"through every pipeline stage. Not built yet: **{names}**. "
                     "Intermediate outputs from the completed stages are shown below.")
 
-    st.subheader(f"Detected PII candidates ({len(result.candidates)})")
-    if result.candidates:
-        st.caption("Raw detector output before entity resolution. Overlaps are "
-                   "expected; pixel boxes are attached in the spatial-mapping stage.")
+    st.subheader(f"Final entities ({len(result.entities)})")
+    if result.entities:
+        st.caption("After resolution: duplicates merged, agreeing detectors combined, "
+                   "address pieces joined, and each entity mapped to one box per line.")
         st.dataframe([{
-            "label": c.label,
-            "text": c.text,
-            "confidence": c.confidence,
-            "detector": c.detector,
-            "evidence": evidence(c),
-            "validated": {True: "✅ pass", False: "❌ fail"}.get(
-                c.attributes.get("validated"), "—"),
-            "OCR-corrected": c.attributes.get("ocr_corrected", ""),
-        } for c in result.candidates], hide_index=True, width="stretch")
+            "#": e.entity_id,
+            "label": e.label,
+            "text": e.text.replace("\n", " ⏎ "),
+            "confidence": e.confidence,
+            "detectors": " + ".join(e.detectors),
+            "boxes": len(e.bboxes),
+            "notes": "; ".join(filter(None, [
+                f"merged {len(e.attributes['merged_from'])} pieces"
+                if e.attributes.get("merged_from") else "",
+                "suppressed " + ", ".join(s["label"] for s in e.attributes["suppressed"])
+                if e.attributes.get("suppressed") else "",
+            ])),
+        } for e in result.entities], hide_index=True, width="stretch")
     else:
-        st.caption("No structured PII found by the detectors that are built so far.")
+        st.caption("No entity passed the resolver's confidence thresholds.")
+
+    with st.expander(f"Raw detector candidates ({len(result.candidates)}) - the evidence"):
+        if not result.candidates:
+            st.caption("No detector produced a candidate.")
+        else:
+            st.caption("Before resolution. Overlaps and duplicates are expected here.")
+            st.dataframe([{
+                "label": c.label,
+                "text": c.text,
+                "confidence": c.confidence,
+                "detector": c.detector,
+                "evidence": evidence(c),
+                "validated": {True: "✅ pass", False: "❌ fail"}.get(
+                    c.attributes.get("validated"), "—"),
+                "OCR-corrected": c.attributes.get("ocr_corrected", ""),
+            } for c in result.candidates], hide_index=True, width="stretch")
 
     st.subheader("Stage outputs")
     names = [n for n in OUTPUT_TITLES if n in outputs and n != "redacted"]

@@ -19,7 +19,9 @@ from app.detection.context_detector import ContextRuleDetector
 from app.detection.name_detector import NameDetector
 from app.detection.ner_detector import NERDetector
 from app.detection.regex_detector import RegexDetector
+from app.mapping.spatial import SpatialMapper
 from app.ocr.engine import OCREngine, build_engine
+from app.resolution.resolver import EntityResolver
 from app.preprocessing.preprocess import Preprocessor
 from app.schemas.document import (DONE, FAILED, PIPELINE_STAGES, SKIPPED,
                                   DocumentResult, StageStatus)
@@ -49,6 +51,8 @@ class DocumentPipeline:
         self.name_detector = NameDetector(self.cfg)
         self.context_detector = ContextRuleDetector(self.cfg)
         self.ner_detector = NERDetector(self.cfg, model=ner_model)
+        self.resolver = EntityResolver(self.cfg)
+        self.mapper = SpatialMapper(self.cfg)
 
     def warm_up(self) -> Optional[str]:
         """Load lazy models up front. Returns an error message instead of raising,
@@ -129,14 +133,23 @@ class DocumentPipeline:
                 ner_stage.note = f"{type(exc).__name__}: {exc}"
                 logger.error("NER stage failed: %s", ner_stage.note)
 
-        # -- Phases 7-8: resolve -> map -> redact (not built yet) ---------------
+        # -- Phase 7: entity resolution + spatial mapping -----------------------
+        t = time.perf_counter()
+        result.entities = self.resolver.resolve(result.candidates, result.text)
+        self._done(stages["resolve"], t)
+
+        t = time.perf_counter()
+        self.mapper.map(result.entities, result.text, (w0, h0))
+        self._done(stages["map"], t)
+
+        # -- Phase 8: redaction (not built yet) --------------------------------
         # Detectors extend result.candidates; the resolver fills result.entities.
 
         result.processing_ms = _ms_since(wall)
         pending = [s.name for s in result.pending_stages]
-        logger.info("Pipeline: %d lines, %d words, %d candidates, %.0f ms; pending: %s",
-                    result.token_count, result.word_count, len(result.candidates),
-                    result.processing_ms,
+        logger.info("Pipeline: %d lines, %d words, %d candidates -> %d entities, %.0f ms; "
+                    "pending: %s", result.token_count, result.word_count,
+                    len(result.candidates), len(result.entities), result.processing_ms,
                     ", ".join(pending) or "none")
         return result
 

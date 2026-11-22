@@ -61,7 +61,10 @@ def test_pipeline_runs_implemented_stages_and_reports_pending(cfg):
     result = make_pipeline(cfg).run_image(blank(), "doc.png")
     done = [s.key for s in result.stages if s.status == "done"]
     assert done == ["preprocess", "ocr", "reconstruct", "detect_regex", "detect_names",
-                    "detect_ner"]
+                    "detect_ner", "resolve", "map"]
+    ents = {(e.label, e.text) for e in result.entities}
+    assert ("PERSON_NAME", "Amit Sharma") in ents and ("PHONE_NUMBER", "9000000000") in ents
+    assert all(e.bboxes for e in result.entities)
     names = sorted(c.detector for c in result.candidates if c.text == "Amit Sharma")
     assert names == ["gliner", "name_trie"]       # two detectors agree
     phone = [c for c in result.candidates if c.label == "PHONE_NUMBER"]
@@ -78,7 +81,7 @@ def test_redacted_output_only_when_pipeline_complete(cfg):
     image = blank()
     result = make_pipeline(cfg).run_image(image, "doc.png")
     outputs = render_outputs(image, result, cfg)
-    assert set(outputs) == {"ocr_lines", "ocr_words"}
+    assert set(outputs) == {"ocr_lines", "ocr_words", "entities"}   # no "redacted" yet
     for s in result.stages:          # simulate a future, fully-built pipeline
         s.status = "done"
     assert "redacted" in render_outputs(image, result, cfg)

@@ -44,6 +44,8 @@ class ResolvedEntity:
     bboxes: List[BBox] = field(default_factory=list)   # one box per line covered
     source_tokens: List[int] = field(default_factory=list)
     detectors: List[str] = field(default_factory=list)  # who contributed
+    # Audit trail: every contributing candidate, merges, suppressed overlaps.
+    attributes: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return asdict(self)

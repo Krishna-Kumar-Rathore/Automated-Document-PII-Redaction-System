@@ -163,7 +163,16 @@ names:
 # ---------------------------------------------------------------------------
 context_rules:
   confidence: 0.80
+  # "address_block": rest of the label's row plus continuation rows, stopping at
+  # a blank row, a "Something:" label row, or after this many extra rows.
+  # (GLiNER alone missed the second line of a 2-line address in testing.)
+  address_max_extra_rows: 3
   fields:
+    - label: ADDRESS
+      value: address_block
+      keywords: ["address", "addr", "residential address", "permanent address",
+                 "present address", "correspondence address",
+                 "communication address", "current address"]
     - label: DATE
       value: date
       keywords: ["dob", "d.o.b", "date of birth", "birth date", "born on"]
@@ -219,15 +228,47 @@ ner:
 # ---------------------------------------------------------------------------
 # Entity resolution [PHASE 7]  (weights are tunable and eval-driven, not fixed)
 # ---------------------------------------------------------------------------
+# Candidates with the same label and overlapping spans form one entity. Score:
+#     final = 1 - PRODUCT(1 - weight[detector] * confidence)
+# (noisy-OR). Independent detectors that agree push confidence up; repeats from
+# the SAME detector count once (its best candidate). Worked examples:
+#   DOB date      regex .75*.95=.71 + context .80*.70=.56 -> .87  (kept, >= .80)
+#   date alone    regex .71                               -> .71  (dropped, < .80)
+#   "Name: Fooby" context_rule .74*.70                    -> .52  (kept)
+#   dict-only name name_trie .74*.55                      -> .41  (dropped unless
+#                 GLiNER agrees: + .91*.80 -> .84)
+# (Format validators are not a separate weight: Phase 4 already folds a pass /
+# fail into the regex candidate's own confidence.)
+# ---------------------------------------------------------------------------
 resolver:
   detector_weights:
     regex: 0.95
     gliner: 0.80
     name_trie: 0.55
-    context_rule: 0.65
-    validator: 0.90
-  overlap_strategy: "highest_score"   # or "longest_span"
+    context_rule: 0.70
   min_final_confidence: 0.50
+  min_confidence_by_label:
+    DATE: 0.80                # a bare date is rarely PII; DOB context lifts it
+    ADDRESS: 0.40             # addresses are sensitive - favour recall
+  # Different labels on overlapping text: keep the winner, drop the loser only if
+  # at least overlap_min_fraction of the LOSER is covered (partial overlaps keep
+  # both, so nothing outside the winner goes unredacted). Dropped candidates are
+  # recorded on the winner for the audit trail.
+  overlap_strategy: "highest_score"   # or "longest_span"
+  overlap_min_fraction: 0.5
+  # GLiNER returns addresses in pieces ("House No 45", "Sector 12", "Dwarka").
+  merge:
+    labels: [ADDRESS]               # join same-label pieces separated only by
+    max_gap_chars: 4                # , . - / or whitespace (incl. line breaks)
+    absorb_labels: [ORGANIZATION]   # "Flat 3B, <Lake View Apartments>, Banjara Hills"
+    attach_pin_code: true           # extend over a trailing 6-digit Indian PIN
+
+# ---------------------------------------------------------------------------
+# Spatial mapping [PHASE 7]: entity char span -> word tokens -> one box per line.
+# Partial words get interpolated sub-word boxes ("DOB:01/01/1990" -> date only).
+# ---------------------------------------------------------------------------
+mapping:
+  padding_px: 2               # grow boxes so interpolation never clips glyph edges
 
 # ---------------------------------------------------------------------------
 # Visualization / redaction [PHASE 7-8]

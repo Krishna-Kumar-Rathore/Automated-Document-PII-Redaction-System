@@ -48,7 +48,7 @@ def _char_weight(ch: str) -> float:
     return 1.0
 
 
-def _cumulative_fractions(text: str) -> np.ndarray:
+def char_fractions(text: str) -> np.ndarray:
     """fractions[i] = horizontal position (0..1) where character i starts."""
     weights = np.array([_char_weight(c) for c in text], dtype=np.float64)
     cum = np.concatenate([[0.0], np.cumsum(weights)])
@@ -56,7 +56,7 @@ def _cumulative_fractions(text: str) -> np.ndarray:
     return cum / total
 
 
-def _line_quad(line: OCRToken) -> np.ndarray:
+def token_quad(line: OCRToken) -> np.ndarray:
     """TL, TR, BR, BL as a 4x2 array; falls back to the bbox if no polygon."""
     if line.polygon and len(line.polygon) == 4:
         return np.asarray(line.polygon, dtype=np.float64)
@@ -64,7 +64,7 @@ def _line_quad(line: OCRToken) -> np.ndarray:
     return np.array([[x1, y1], [x2, y1], [x2, y2], [x1, y2]], dtype=np.float64)
 
 
-def _sub_quad(quad: np.ndarray, f0: float, f1: float) -> Polygon:
+def sub_quad(quad: np.ndarray, f0: float, f1: float) -> Polygon:
     """Slice the line quad between horizontal fractions f0..f1."""
     tl, tr, br, bl = quad
     top0, top1 = tl + (tr - tl) * f0, tl + (tr - tl) * f1
@@ -139,11 +139,11 @@ class TextReconstructor:
 
     def _split_words(self, line: OCRToken, line_start: int, id_offset: int,
                      clip_w, clip_h) -> List[OCRToken]:
-        quad = _line_quad(line)
-        fracs = _cumulative_fractions(line.text)
+        quad = token_quad(line)
+        fracs = char_fractions(line.text)
         out: List[OCRToken] = []
         for m in _WORD_RE.finditer(line.text):
-            poly = _sub_quad(quad, fracs[m.start()], fracs[m.end()])
+            poly = sub_quad(quad, fracs[m.start()], fracs[m.end()])
             out.append(OCRToken(
                 id=id_offset + len(out) + 1,
                 text=m.group(),

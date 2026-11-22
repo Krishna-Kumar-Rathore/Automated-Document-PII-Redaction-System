@@ -66,6 +66,10 @@ def main() -> None:
     for c in result.candidates:
         check = {True: "valid", False: "INVALID"}.get(c.attributes.get("validated"), "")
         print(f"  {c.label:<14} {c.confidence:.2f}  {c.detector:<12} {c.text!r}  {check}")
+    print(f"Entities        : {len(result.entities)}")
+    for e in result.entities:
+        print(f"  #{e.entity_id} {e.label:<14} {e.confidence:.2f}  {e.text!r}  "
+              f"boxes={e.bboxes}  by={'+'.join(e.detectors)}")
     if not result.is_complete:
         print("Redacted image  : not produced - pipeline incomplete")
     for path in written:

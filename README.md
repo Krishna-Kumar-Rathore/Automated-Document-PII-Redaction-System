@@ -25,7 +25,7 @@ Every redaction can be traced back through this chain — which detector flagged
 | 4 | Regex detection + format validators (email, phone, URL, UPI, date, Aadhaar, PAN, IFSC) | ✅ Done |
 | 5 | Name dictionary (trie, fuzzy) + context rules (Name:, Mr., S/O, DOB, A/c No., Aadhaar No.) | ✅ Done |
 | 6 | NER model: GLiNER small, int8 ONNX (person, address, organization) | ✅ Done |
-| 7 | Entity resolution + spatial mapping | ⏳ |
+| 7 | Entity resolution (noisy-OR scoring, address merging, overlap handling) + spatial mapping (sub-word, one box per line) | ✅ Done |
 | 8 | Redaction | ⏳ |
 | 9 | Streamlit UI | ✅ Started early: runs every built stage and shows its outputs |
 
@@ -171,7 +171,9 @@ app/
   ocr/            OCREngine interface + RapidOCR implementation
   text/           Phase 3 text reconstruction (reading order, word boxes, offset map)
   detection/      Detector interface; regex + validators (Phase 4);
-                  name trie, name detector, context rules (Phase 5)
+                  name trie, name detector, context rules (Phase 5); GLiNER (Phase 6)
+  resolution/     EntityResolver: candidates -> final entities (Phase 7)
+  mapping/        SpatialMapper: entity spans -> per-line pixel boxes (Phase 7)
   visualization/  output image rendering (line/word boxes, entities, redaction)
   pipeline/       DocumentPipeline: runs every stage, reports pending ones
   main.py         CLI entrypoint
@@ -187,6 +189,10 @@ tests/            unit tests
 - **Why hybrid, not just a model?** No single method wins. Regex nails structured entities; a NER model handles unstructured names; dictionaries help but over-fire alone. Combining signals and resolving them is more robust than any one detector.
 - **Line-level vs word-level OCR.** PP-OCR detects whole lines, not words. The reconstruction stage splits lines into word tokens with interpolated boxes so a detected span maps to a tight region.
 - **Multi-line entities.** Merging all boxes of a multi-line address into one rectangle would over-cover the page; instead each line gets its own box.
+- **Agreement is evidence (noisy-OR).** Final confidence is `1 − Π(1 − weight × confidence)` over detectors. Independent detectors that agree raise the score, and repeats from one detector count once. A bare date (0.71) stays below the DATE threshold (0.80), while a `DOB:` date found by regex **and** a context rule reaches 0.87. A dictionary-only name (0.41) needs GLiNER to agree.
+- **Partial overlaps keep both entities.** When two labels overlap, the loser is dropped only if it is mostly covered by the winner, and it is recorded on the winner. Dropping a partly overlapping entity would leave its uncovered part unredacted.
+- **Addresses: a model *and* a rule.** In testing, GLiNER tagged only `House No 45`, `Sector 12` from a two-line address and missed `Dwarka, New Delhi 110075`. The resolver joins adjacent address pieces (absorbing building names and a trailing PIN), and an `Address:` context rule claims continuation rows up to the next `Label:` row. Together they covered the whole address, at 0.77 with one box per line.
+- **Sub-word boxes.** OCR often merges a label and value (`DOB:01/01/1990` is one token). The mapper slices partly covered words with the same glyph-width model used for word boxes, so only the date is boxed. Boxes are padded 2 px, because over-covering by a few pixels is safe and under-covering leaks.
 - **Coordinate correctness.** All preprocessing transforms are composed into one affine matrix and inverted, so boxes always map to the original image.
 - **Validators boost, never gate.** OCR can misread one digit of a genuine Aadhaar number. Dropping it on a failed checksum would leak it, so a failed check only lowers confidence and the resolver decides.
 - **OCR-tolerant numbers.** Numeric patterns run on a same-length "digit view" of the text that fixes common confusions (O→0, l→1, S→5, B→8), but only inside digit-heavy chunks. `9OOO0 l2345` is read as a phone number, while words like `BOSS` or `Oct` are left alone, and every match offset still points at the original text.

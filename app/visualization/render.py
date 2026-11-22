@@ -11,7 +11,7 @@ import cv2
 import numpy as np
 
 from app.config.loader import Config
-from app.schemas.document import DocumentResult
+from app.schemas.document import DONE, DocumentResult
 from app.schemas.entities import ResolvedEntity
 from app.schemas.ocr import OCRToken
 
@@ -96,8 +96,9 @@ def redact(image: np.ndarray, entities: Sequence[ResolvedEntity],
 
 def render_outputs(image: np.ndarray, result: DocumentResult,
                    cfg: Config) -> Dict[str, np.ndarray]:
-    """Named output images. ``redacted`` / ``entities`` appear only once the
-    document has gone through EVERY pipeline stage."""
+    """Named output images. ``entities`` (annotated, intermediate) appears once
+    spatial mapping has run; ``redacted`` only once the document has gone
+    through EVERY pipeline stage."""
     style = VizStyle.from_config(cfg)
     outputs: Dict[str, np.ndarray] = {
         "ocr_lines": draw_tokens(image, result.ocr, style.line_color, style),
@@ -105,15 +106,16 @@ def render_outputs(image: np.ndarray, result: DocumentResult,
     if result.text is not None:
         outputs["ocr_words"] = draw_tokens(image, result.text.words, style.word_color,
                                            style, show_conf=False, use_polygon=True)
-    if result.is_complete:
+    if any(s.key == "map" and s.status == DONE for s in result.stages):
         outputs["entities"] = draw_entities(image, result.entities, style)
+    if result.is_complete:
         outputs["redacted"] = redact(image, result.entities, style)
     return outputs
 
 
 OUTPUT_TITLES: Dict[str, str] = {
     "redacted": "Redacted image",
-    "entities": "Detected PII (annotated)",
+    "entities": "Final entities (Phase 7)",
     "ocr_words": "Word boxes (Phase 3)",
     "ocr_lines": "OCR line boxes (Phase 2)",
 }
