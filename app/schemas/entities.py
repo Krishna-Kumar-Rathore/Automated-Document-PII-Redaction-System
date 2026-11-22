@@ -8,7 +8,7 @@ that lands in result.json.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from typing import List
+from typing import Any, Dict, List
 
 from .ocr import BBox
 
@@ -23,6 +23,9 @@ class EntityCandidate:
     end: int                # exclusive
     confidence: float
     detector: str           # "regex" | "gliner" | "name_trie" | "context_rule" | ...
+    # Audit details, e.g. {"pattern": "AADHAAR", "validator": "verhoeff",
+    # "validated": True, "ocr_corrected": "2345..."}.
+    attributes: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return asdict(self)

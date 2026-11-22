@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import List, Optional
 
-from .entities import ResolvedEntity
+from .entities import EntityCandidate, ResolvedEntity
 from .ocr import ImageMeta, OCRToken
 from .text import ReconstructedText
 
@@ -20,7 +20,9 @@ PIPELINE_STAGES = [
     ("preprocess", "Preprocessing", "2"),
     ("ocr", "OCR", "2"),
     ("reconstruct", "Text reconstruction", "3"),
-    ("detect", "PII detection", "4-6"),
+    ("detect_regex", "Regex + format validators", "4"),
+    ("detect_names", "Name dictionary + context rules", "5"),
+    ("detect_ner", "NER model (GLiNER)", "6"),
     ("resolve", "Entity resolution", "7"),
     ("map", "Spatial mapping", "7"),
     ("redact", "Redaction", "8"),
@@ -47,7 +49,8 @@ class DocumentResult:
     image: ImageMeta
     ocr: List[OCRToken] = field(default_factory=list)       # line tokens
     text: Optional[ReconstructedText] = None
-    entities: List[ResolvedEntity] = field(default_factory=list)
+    candidates: List[EntityCandidate] = field(default_factory=list)  # raw detector output
+    entities: List[ResolvedEntity] = field(default_factory=list)     # after resolution
     stages: List[StageStatus] = field(default_factory=list)
     processing_ms: Optional[float] = None
 
@@ -77,5 +80,6 @@ class DocumentResult:
             "stages": [s.to_dict() for s in self.stages],
             "ocr": [t.to_dict() for t in self.ocr],
             "text": self.text.to_dict() if self.text else None,
+            "candidates": [c.to_dict() for c in self.candidates],
             "entities": [e.to_dict() for e in self.entities],
         }

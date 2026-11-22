@@ -15,6 +15,7 @@ import cv2
 import numpy as np
 
 from app.config.loader import Config, load_config
+from app.detection.regex_detector import RegexDetector
 from app.ocr.engine import OCREngine, build_engine
 from app.preprocessing.preprocess import Preprocessor
 from app.schemas.document import (DONE, PIPELINE_STAGES, DocumentResult,
@@ -38,6 +39,7 @@ class DocumentPipeline:
         # Engine construction loads models, so allow injection (tests / reuse).
         self.engine = engine or build_engine(self.cfg)
         self.reconstructor = TextReconstructor(self.cfg)
+        self.regex_detector = RegexDetector(self.cfg)
 
     def run(self, image_path: str | Path) -> DocumentResult:
         """Convenience wrapper: read an image file and run the pipeline."""
@@ -81,13 +83,19 @@ class DocumentPipeline:
         result.ocr = result.text.lines        # lines in reading order, with offsets
         self._done(stages["reconstruct"], t)
 
-        # -- Phases 4-8: detect -> resolve -> map -> redact (not built yet) ---
-        # Each will populate result.entities and mark its stage DONE here.
+        # -- Phase 4: regex detection + format validators --------------------
+        t = time.perf_counter()
+        result.candidates.extend(self.regex_detector.detect(result.text))
+        self._done(stages["detect_regex"], t)
+
+        # -- Phases 5-8: names -> NER -> resolve -> map -> redact (not built) --
+        # Detectors extend result.candidates; the resolver fills result.entities.
 
         result.processing_ms = _ms_since(wall)
         pending = [s.name for s in result.pending_stages]
-        logger.info("Pipeline: %d lines, %d words, %.0f ms; pending stages: %s",
-                    result.token_count, result.word_count, result.processing_ms,
+        logger.info("Pipeline: %d lines, %d words, %d candidates, %.0f ms; pending: %s",
+                    result.token_count, result.word_count, len(result.candidates),
+                    result.processing_ms,
                     ", ".join(pending) or "none")
         return result
 

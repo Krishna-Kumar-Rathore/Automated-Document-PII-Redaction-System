@@ -22,7 +22,9 @@ Every redaction can be traced back through this chain — which detector flagged
 |---|---|---|
 | 1–2 | Preprocessing + OCR | ✅ Done |
 | 3 | Text reconstruction (word tokens, char-offset ↔ token map) | ✅ Done |
-| 4–6 | PII detection (regex, name tries, GLiNER, context rules) | ⏳ Next |
+| 4 | Regex detection + format validators (email, phone, URL, UPI, date, Aadhaar, PAN, IFSC) | ✅ Done |
+| 5 | Name dictionary (trie) + context rules | ⏳ Next |
+| 6 | NER model (GLiNER) | ⏳ |
 | 7 | Entity resolution + spatial mapping | ⏳ |
 | 8 | Redaction | ⏳ |
 | 9 | Streamlit UI | ✅ Started early: runs every built stage and shows its outputs |
@@ -55,7 +57,7 @@ This system aims to **detect PII reliably, redact it on the actual image, and ma
 |---|---|---|
 | OCR | **RapidOCR + ONNX Runtime** (PP-OCR models) | Lightweight, CPU-fast, painless on Windows (sidesteps heavy PaddlePaddle setup) |
 | NER | **GLiNER** (ONNX) | Fast on CPU, and supports configurable labels at inference — fits the configurable entity registry |
-| Structured detection | **Regex** + format validators | Aadhaar (Verhoeff checksum), PAN, IFSC boost confidence when patterns appear |
+| Structured detection | **Regex** + format validators | Aadhaar (Verhoeff checksum), PAN holder type, Indian mobile format, real calendar dates, known UPI handles: a pass boosts confidence, a fail lowers it, and nothing is dropped |
 | Name detection | **Custom Trie** | O(length) lookups over first / middle / last-name lists |
 | Image ops | **OpenCV** | Preprocessing, annotation, redaction |
 | Config | **YAML** | Single source of truth for all tunables |
@@ -166,6 +168,7 @@ app/
   preprocessing/  deskew / denoise / scale with coordinate tracking
   ocr/            OCREngine interface + RapidOCR implementation
   text/           Phase 3 text reconstruction (reading order, word boxes, offset map)
+  detection/      Detector interface, Phase 4 regex detector + format validators
   visualization/  output image rendering (line/word boxes, entities, redaction)
   pipeline/       DocumentPipeline: runs every stage, reports pending ones
   main.py         CLI entrypoint
@@ -182,6 +185,9 @@ tests/            unit tests
 - **Line-level vs word-level OCR.** PP-OCR detects whole lines, not words. The reconstruction stage splits lines into word tokens with interpolated boxes so a detected span maps to a tight region.
 - **Multi-line entities.** Merging all boxes of a multi-line address into one rectangle would over-cover the page; instead each line gets its own box.
 - **Coordinate correctness.** All preprocessing transforms are composed into one affine matrix and inverted, so boxes always map to the original image.
+- **Validators boost, never gate.** OCR can misread one digit of a genuine Aadhaar number. Dropping it on a failed checksum would leak it, so a failed check only lowers confidence and the resolver decides.
+- **OCR-tolerant numbers.** Numeric patterns run on a same-length "digit view" of the text that fixes common confusions (O→0, l→1, S→5, B→8), but only inside digit-heavy chunks. `9OOO0 l2345` is read as a phone number, while words like `BOSS` or `Oct` are left alone, and every match offset still points at the original text.
+- **Formatting is evidence.** `080-23456789` and `08023456789` contain the same digits, but the grouping shows the first is a landline (STD code), so the phone validator checks grouping as well as digits.
 
 ## Evaluation
 

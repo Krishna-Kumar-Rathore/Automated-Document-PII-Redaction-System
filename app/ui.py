@@ -117,6 +117,23 @@ def render_results(entry: dict) -> None:
                 f"through every pipeline stage. Not built yet: **{pending}**. "
                 "Intermediate outputs from the completed stages are shown below.")
 
+    st.subheader(f"Detected PII candidates ({len(result.candidates)})")
+    if result.candidates:
+        st.caption("Raw detector output before entity resolution. Overlaps are "
+                   "expected; pixel boxes are attached in the spatial-mapping stage.")
+        st.dataframe([{
+            "label": c.label,
+            "text": c.text,
+            "confidence": c.confidence,
+            "detector": c.detector,
+            "pattern": c.attributes.get("pattern", ""),
+            "validated": {True: "✅ pass", False: "❌ fail"}.get(
+                c.attributes.get("validated"), "—"),
+            "OCR-corrected": c.attributes.get("ocr_corrected", ""),
+        } for c in result.candidates], hide_index=True, width="stretch")
+    else:
+        st.caption("No structured PII found by the detectors that are built so far.")
+
     st.subheader("Stage outputs")
     names = [n for n in OUTPUT_TITLES if n in outputs and n != "redacted"]
     tabs = st.tabs([OUTPUT_TITLES[n] for n in names] + ["Original"])

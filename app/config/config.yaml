@@ -68,12 +68,41 @@ entities:
 # ---------------------------------------------------------------------------
 # Regex detectors [PHASE 4]  (patterns live in code module, tunables here)
 # ---------------------------------------------------------------------------
+# Each pattern emits an EntityCandidate with its base confidence. If the pattern
+# has a validator and it is enabled, a PASS adds validator_boost and a FAIL
+# subtracts validator_penalty - the candidate is still emitted (OCR may have
+# garbled a digit), so the resolver / eval can decide. Validators never gate.
+# ---------------------------------------------------------------------------
 regex:
-  enabled: [EMAIL, PHONE_NUMBER, URL, UPI_ID]
+  # pattern key -> entity label:  EMAIL, PHONE_NUMBER, URL, UPI_ID, DATE,
+  # AADHAAR -> ID_NUMBER, PAN -> ID_NUMBER, IFSC -> OTHER_PII
+  enabled: [EMAIL, PHONE_NUMBER, URL, UPI_ID, DATE, AADHAAR, PAN, IFSC]
+  base_confidence:
+    EMAIL: 0.95
+    URL: 0.80
+    UPI_ID: 0.80
+    PHONE_NUMBER: 0.75
+    DATE: 0.55               # many dates are not PII; context (DOB) boosts later
+    AADHAAR: 0.70
+    PAN: 0.75
+    IFSC: 0.70
   validators:                 # optional confidence boosters, not gatekeepers
-    aadhaar: true             # 12 digits + Verhoeff checksum
-    pan: true                 # ABCDE1234F
-    ifsc: true                # SBIN0001234
+    aadhaar: true             # 12 digits, first digit 2-9, Verhoeff checksum
+    pan: true                 # ABCDE1234F, 4th char = valid holder type (P, C, H, ...)
+    phone: true               # Indian mobile: 10 digits starting 6-9 (+91 / 0 prefix ok)
+    date: true                # real calendar date, year 1900-2100
+    upi: true                 # handle is a known UPI provider (list below)
+  validator_boost: 0.20       # capped at 0.99
+  validator_penalty: 0.15     # floored at 0.05
+  # OCR often reads 0 as O, 1 as I/l, 5 as S, 8 as B inside numbers. Numeric
+  # patterns run on a same-length "digit view" of the text where these are
+  # corrected only inside digit-heavy chunks, so offsets stay exact.
+  ocr_digit_correction: true
+  upi_handles: [ybl, ibl, axl, okaxis, oksbi, okhdfcbank, okicici, paytm, upi,
+                apl, yapl, rapl, axisbank, icici, sbi, hdfcbank, kotak, idfcbank,
+                indus, federal, barodampay, pnb, aubank, jupiteraxis, fbl,
+                freecharge, timecosmos, slc, pingpay, abfspay, waaxis, wahdfcbank,
+                waicici, wasbi, ikwik, airtel, jio, naviaxis, superyes, kmbl]
 
 # ---------------------------------------------------------------------------
 # Name detection [PHASE 5]

@@ -60,6 +60,10 @@ def main() -> None:
     print(f"Processing time : {result.processing_ms:.0f} ms")
     for stage in result.stages:
         print(f"  [{'x' if stage.status == 'done' else ' '}] Phase {stage.phase:<4} {stage.name}")
+    print(f"PII candidates  : {len(result.candidates)}")
+    for c in result.candidates:
+        check = {True: "valid", False: "INVALID"}.get(c.attributes.get("validated"), "")
+        print(f"  {c.label:<13} {c.confidence:.2f}  {c.text!r}  {check}")
     if not result.is_complete:
         print("Redacted image  : not produced - pipeline incomplete")
     for path in written:
