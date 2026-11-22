@@ -130,17 +130,21 @@ pytest -q
 ## Deploying the UI (Streamlit Community Cloud)
 
 1. Push the repo to GitHub.
-2. At [share.streamlit.io](https://share.streamlit.io) choose **New app**, pick the repo and set **Main file path** to `app/ui.py`.
-3. Under **Advanced settings**, select **Python 3.11** (any of 3.9–3.12 works).
+2. At [share.streamlit.io](https://share.streamlit.io), sign in with GitHub and choose **Create app** → **Deploy a public app from GitHub**.
+3. Set **Repository** to this repo, **Branch** to `main`, and **Main file path** to `app/ui.py`.
+4. Under **Advanced settings**, choose **Python 3.12** (the platform default) or 3.11. Both were verified to resolve `requirements.txt` on Linux. Don't pick 3.13, because RapidOCR doesn't support it.
+5. Click **Deploy**. The first build installs dependencies, which takes several minutes. The first page load then downloads the NER model (186 MB) and shows "Loading models…".
 
 The repo already contains what the platform needs:
-- `requirements.txt`: Python dependencies
+- `requirements.txt`: dependencies pinned to the versions the pipeline was verified with, and CPU-only PyTorch (verified to resolve with no CUDA packages for Linux on Python 3.11 and 3.12)
 - `packages.txt`: `libgl1` and `libglib2.0-0` for OpenCV on Linux
 - `.streamlit/config.toml`: 10 MB upload limit, usage telemetry off
 
 The same files work on any Docker or VM host: `streamlit run app/ui.py --server.port 8501`.
 
-> **Memory:** measured on the sample document, the pipeline uses about **630 MB** steady and **810 MB at peak** with all models loaded. Most of that is PyTorch, which GLiNER needs, rather than the model itself. Streamlit adds roughly 100–150 MB, so a 1 GB free host is tight. Use a host with 2 GB, or set `ner.enabled: false` (the NER stage is then reported as *skipped*).
+> **Memory:** measured on the sample document, the pipeline uses about **630 MB** steady and **810 MB at peak** with all models loaded. Most of that is PyTorch, which GLiNER needs, rather than the model itself. Streamlit Community Cloud's documented limit is up to about **2.7 GB** (figures as of February 2024; they say limits may change), so this fits with NER on. On a smaller host, set `ner.enabled: false` (the NER stage is then reported as *skipped*).
+
+> **Sleep:** Community Cloud puts apps with no traffic for 12 hours to sleep. The next visitor wakes it, and the models download and load again on that first visit.
 
 > **Privacy note for public deployments:** the app never stores uploads, but the document is still sent to the server that hosts it. For real ID documents, self-host it or keep it private.
 
