@@ -3,7 +3,7 @@
 > Detects and redacts personally identifiable information (PII) from document images — Aadhaar cards, PAN cards, business cards, even newspaper scans — and maps every detected entity back to its exact pixel region for **auditable** redaction.
 
 
-![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![Python](https://img.shields.io/badge/python-3.9%E2%80%933.12-blue)
 ![Platform](https://img.shields.io/badge/runs%20on-CPU%20(no%20GPU)-success)
 
 The design goal that drives the whole system:
@@ -14,9 +14,20 @@ OCR text  →  entity  →  entity type  →  OCR token  →  bounding box  → 
 
 Every redaction can be traced back through this chain — which detector flagged it, which text it matched, and which pixels were covered. Detecting PII is the easy half; getting the coordinates right and keeping the decision explainable is the hard, interesting half.
 
----
+![High-level architecture](docs/hld_architecture.png)
 
+## Project status
 
+| Phase | Stage | Status |
+|---|---|---|
+| 1–2 | Preprocessing + OCR | ✅ Done |
+| 3 | Text reconstruction (word tokens, char-offset ↔ token map) | ✅ Done |
+| 4–6 | PII detection (regex, name tries, GLiNER, context rules) | ⏳ Next |
+| 7 | Entity resolution + spatial mapping | ⏳ |
+| 8 | Redaction | ⏳ |
+| 9 | Streamlit UI | ✅ Started early: runs every built stage and shows its outputs |
+
+The redacted image is produced **only after a document passes through every stage**. Until then, the CLI and UI show the intermediate outputs of the stages that are built.
 
 ---
 
@@ -49,7 +60,7 @@ This system aims to **detect PII reliably, redact it on the actual image, and ma
 | Image ops | **OpenCV** | Preprocessing, annotation, redaction |
 | Config | **YAML** | Single source of truth for all tunables |
 | UI | **Streamlit** (FastAPI optional later) | Fast demo UI, backend kept separable |
-| Language | **Python 3.10+** | — |
+| Language | **Python 3.9–3.12** | RapidOCR does not support 3.13 yet |
 
 ## How it works
 
@@ -67,70 +78,101 @@ This system aims to **detect PII reliably, redact it on the actual image, and ma
 ## Getting started
 
 ### Prerequisites
-- Python 3.10–3.12
+- Python 3.9–3.12
 - No GPU required
 
 ### Installation
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/automated-document-pii-redaction.git
-cd automated-document-pii-redaction
+git clone https://github.com/Krishna-Kumar-Rathore/Automated-Document-PII-Redaction-System.git
+cd Automated-Document-PII-Redaction-System
 python -m venv .venv
 # Windows:  .\.venv\Scripts\Activate.ps1
 # macOS/Linux:  source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Usage (current: Phase 2 — OCR)
+> The OCR ONNX models ship inside the `rapidocr-onnxruntime` wheel, so nothing is downloaded at runtime. Everything runs fully offline.
+
+### Web UI
 
 ```bash
-python -m app.main --image sample.jpg --outdir outputs
+streamlit run app/ui.py
+```
+
+Upload a JPG/PNG (or click **try the synthetic sample**). The page shows each pipeline stage's status and timing, the output images from the completed stages (line boxes, word boxes), the reconstructed text, and a downloadable `result.json`. The **redacted image** appears once every stage is implemented. Uploads are processed in memory and never written to disk.
+
+### Command line
+
+```bash
+python -m app.main --image sample.jpg            # --outdir defaults to paths.outputs_dir
 ```
 
 This produces:
-- `outputs/sample.ocr.json` — structured OCR result (tokens, confidence, boxes)
-- `outputs/sample.ocr_viz.jpg` — the image with detected boxes drawn
-
-> The first run downloads the OCR ONNX models once (~8 MB); after that it runs fully offline.
+- `outputs/sample.result.json`: stage statuses, OCR lines, reconstructed text, word tokens, entities
+- `outputs/sample.ocr_lines.jpg`: OCR line boxes
+- `outputs/sample.ocr_words.jpg`: word boxes from text reconstruction
+- `outputs/sample.redacted.jpg`: only once the full pipeline is built
 
 ### Running tests
 
 ```bash
-pytest tests/ -q
+pytest -q
 ```
+
+## Deploying the UI (Streamlit Community Cloud)
+
+1. Push the repo to GitHub.
+2. At [share.streamlit.io](https://share.streamlit.io) choose **New app**, pick the repo and set **Main file path** to `app/ui.py`.
+3. Under **Advanced settings**, select **Python 3.11** (any of 3.9–3.12 works).
+
+The repo already contains what the platform needs:
+- `requirements.txt`: Python dependencies
+- `packages.txt`: `libgl1` and `libglib2.0-0` for OpenCV on Linux
+- `.streamlit/config.toml`: 10 MB upload limit, usage telemetry off
+
+The same files work on any Docker or VM host: `streamlit run app/ui.py --server.port 8501`.
+
+> **Privacy note for public deployments:** the app never stores uploads, but the document is still sent to the server that hosts it. For real ID documents, self-host it or keep it private.
 
 ## Example output
 
-OCR result (excerpt), with boxes reported in original-image coordinates:
+Line tokens from OCR, then word tokens from text reconstruction. Boxes are in original-image coordinates, and `start`/`end` are offsets into the reconstructed `full_text`:
 
 ```json
 {
-  "document_id": "sample",
-  "image": { "filename": "sample.jpg", "width": 700, "height": 400 },
-  "ocr": [
-    { "id": 2, "text": "Name: Krishna Kumar Rathore", "confidence": 0.99,
-      "bbox": [61, 119, 447, 145], "granularity": "line" }
-  ]
+  "ocr":   [{ "id": 2, "text": "Name: Amit Kumar Sharma", "confidence": 0.9974,
+              "bbox": [63, 118, 377, 144], "granularity": "line", "start": 18, "end": 41 }],
+  "text": {
+    "full_text": "...\nName: Amit Kumar Sharma\n...",
+    "words": [
+      { "id": 3, "text": "Amit",   "bbox": [145, 119, 198, 142], "parent_id": 2, "start": 24, "end": 28 },
+      { "id": 4, "text": "Kumar",  "bbox": [206, 119, 280, 143], "parent_id": 2, "start": 29, "end": 34 },
+      { "id": 5, "text": "Sharma", "bbox": [288, 120, 377, 144], "parent_id": 2, "start": 35, "end": 41 }
+    ]
+  }
 }
 ```
 
-A `700×400` image is upscaled ×1.43 for OCR, yet every box returns in the original `700×400` space — the affine round-trip is unit-tested so coordinates survive scaling and rotation exactly.
+A detector that finds `"Amit Kumar Sharma"` at chars 24–41 maps back to word tokens 3–5, and from there to their pixel boxes. The `700×400` sample is upscaled ×1.43 for OCR, yet every box comes back in the original `700×400` space. The affine round-trip is unit-tested, including deskew with canvas expansion.
 
 ## Project structure
 
 ```
 app/
   config/         config.yaml + loader   (single source of truth)
-  schemas/        typed data contracts   (OCRToken, EntityCandidate, ResolvedEntity)
+  schemas/        typed data contracts   (OCRToken, ReconstructedText, DocumentResult, EntityCandidate, ResolvedEntity)
   utils/          logging, geometry (affine tracking)
   preprocessing/  deskew / denoise / scale with coordinate tracking
   ocr/            OCREngine interface + RapidOCR implementation
-  visualization/  OCR + entity box drawing
-  pipeline/       stage orchestration
+  text/           Phase 3 text reconstruction (reading order, word boxes, offset map)
+  visualization/  output image rendering (line/word boxes, entities, redaction)
+  pipeline/       DocumentPipeline: runs every stage, reports pending ones
   main.py         CLI entrypoint
+  ui.py           Streamlit web UI
 data/names/       firstName / middleName / lastName lists
-docs/             architecture diagrams
-eval/             test set + precision/recall harness
+docs/             architecture diagrams (HLD / LLD)
+eval/             (planned) labelled test set + precision/recall harness
 tests/            unit tests
 ```
 

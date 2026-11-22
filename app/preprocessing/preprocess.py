@@ -86,11 +86,23 @@ class Preprocessor:
         h, w = image.shape[:2]
         center = (w / 2.0, h / 2.0)
         rot = cv2.getRotationMatrix2D(center, angle, 1.0)
+
+        # Expand the canvas to the rotated image's bounding size so text near the
+        # corners is not cropped; shift the matrix so content stays centred.
+        # The extra translation is part of `rot`, so the inverse affine still
+        # maps OCR boxes back to the original image exactly.
+        cos, sin = abs(rot[0, 0]), abs(rot[0, 1])
+        new_w = int(np.ceil(h * sin + w * cos))
+        new_h = int(np.ceil(h * cos + w * sin))
+        rot[0, 2] += new_w / 2.0 - center[0]
+        rot[1, 2] += new_h / 2.0 - center[1]
+
         rotated = cv2.warpAffine(
-            image, rot, (w, h), flags=cv2.INTER_CUBIC,
-            borderMode=cv2.BORDER_REPLICATE,
+            image, rot, (new_w, new_h), flags=cv2.INTER_CUBIC,
+            borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255),
         )
-        logger.info("Deskewed by %.2f deg", angle)
+        logger.info("Deskewed by %.2f deg (canvas %dx%d -> %dx%d)",
+                    angle, w, h, new_w, new_h)
         return rotated, compose_affine(transform, rot)
 
     @staticmethod

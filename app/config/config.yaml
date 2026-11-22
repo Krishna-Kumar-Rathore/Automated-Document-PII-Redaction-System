@@ -30,9 +30,20 @@ preprocessing:
 ocr:
   engine: "rapidocr"          # swappable behind the OCREngine interface
   text_score: 0.5             # drop detections below this confidence
-  # RapidOCR ships PP-OCR English mobile models. Leave null to use its defaults.
+  # RapidOCR's bundled defaults are the Chinese+English ch_PP-OCRv4 det/rec models,
+  # which sometimes drop spaces in tightly-spaced English ("DOB:01/01/1990").
+  # Leave null to use them, or point to an English PP-OCR rec model here.
   det_model_path: null
   rec_model_path: null
+
+# ---------------------------------------------------------------------------
+# Text reconstruction [PHASE 3]
+# Lines whose vertical extents overlap by >= row_overlap (fraction of the shorter
+# line's height) are treated as one visual row and joined left -> right.
+# ---------------------------------------------------------------------------
+reconstruction:
+  row_overlap: 0.5
+  row_separator: " "          # between lines on the same row ("\n" between rows)
 
 # ---------------------------------------------------------------------------
 # Entity registry [PHASE 4+]
@@ -94,8 +105,10 @@ resolver:
 # ---------------------------------------------------------------------------
 visualization:
   box_thickness: 2
-  font_scale: 0.5
+  font_scale: 0.45
   draw_labels: true
+  ocr_line_color: [0, 140, 255]   # BGR; Phase 2 line boxes (orange)
+  ocr_word_color: [200, 120, 0]   # BGR; Phase 3 word boxes (blue)
   colors:                     # BGR; configurable per class
     PERSON_NAME:   [0, 180, 0]
     EMAIL:         [0, 0, 220]
@@ -110,6 +123,12 @@ visualization:
     OTHER_PII:     [128, 128, 128]
   default_color: [128, 128, 128]
   redaction_fill: [0, 0, 0]   # opaque black for true redaction
+
+# ---------------------------------------------------------------------------
+# Web UI [PHASE 9]  (upload size limit itself lives in .streamlit/config.toml)
+# ---------------------------------------------------------------------------
+ui:
+  allowed_types: ["jpg", "jpeg", "png", "bmp", "webp"]
 
 logging:
   level: "INFO"

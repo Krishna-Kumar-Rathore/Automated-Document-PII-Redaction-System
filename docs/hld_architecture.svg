@@ -1,0 +1,135 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1180" font-family="'Segoe UI', system-ui, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#495057"/>
+    </marker>
+    <marker id="arrowRed" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#e03131"/>
+    </marker>
+    <style>
+      .title  { font-size: 26px; font-weight: 700; fill: #1a2233; }
+      .sub    { font-size: 14px; fill: #5c6b82; }
+      .stage  { font-size: 16px; font-weight: 600; }
+      .desc   { font-size: 12px; }
+      .tag    { font-size: 11px; font-weight: 700; fill: #ffffff; }
+      .rail   { font-size: 12px; fill: #1a2233; }
+      .railh  { font-size: 13px; font-weight: 700; fill: #1a2233; }
+      .flow   { stroke: #495057; stroke-width: 2; fill: none; }
+    </style>
+  </defs>
+
+  <rect width="1000" height="1180" fill="#ffffff"/>
+  <text x="40" y="48" class="title">Automated Document PII Redaction — High-Level Design</text>
+  <text x="40" y="72" class="sub">Preserve the chain:  OCR text  →  entity  →  type  →  OCR token  →  bounding box  →  image region</text>
+
+  <!-- ===== main column (x center ~ 300, width 480) ===== -->
+  <!-- 1 Input -->
+  <rect x="120" y="100" width="480" height="52" rx="10" fill="#eef2f5" stroke="#495057" stroke-width="1.5"/>
+  <text x="360" y="132" text-anchor="middle" class="stage" fill="#1a2233">Document Image  (JPG / PNG)</text>
+  <path class="flow" d="M360,152 L360,180" marker-end="url(#arrow)"/>
+
+  <!-- 2 Preprocessing -->
+  <rect x="120" y="182" width="480" height="64" rx="10" fill="#e7f5f0" stroke="#0ca678" stroke-width="1.5"/>
+  <text x="360" y="210" text-anchor="middle" class="stage" fill="#087f5b">Preprocessing  ·  OpenCV</text>
+  <text x="360" y="231" text-anchor="middle" class="desc" fill="#2b8a68">deskew · denoise · scale  —  every op tracked in one affine matrix</text>
+  <path class="flow" d="M360,246 L360,274" marker-end="url(#arrow)"/>
+
+  <!-- 3 OCR -->
+  <rect x="120" y="276" width="480" height="64" rx="10" fill="#e7f5f0" stroke="#0ca678" stroke-width="1.5"/>
+  <text x="360" y="304" text-anchor="middle" class="stage" fill="#087f5b">OCR  ·  RapidOCR / PP-OCR  (ONNX)</text>
+  <text x="360" y="325" text-anchor="middle" class="desc" fill="#2b8a68">line-level tokens  +  confidence  +  boxes → original coords</text>
+  <path class="flow" d="M360,340 L360,368" marker-end="url(#arrow)"/>
+
+  <!-- 4 Reconstruction -->
+  <rect x="120" y="370" width="480" height="64" rx="10" fill="#eef2fb" stroke="#3b5bdb" stroke-width="1.5"/>
+  <text x="360" y="398" text-anchor="middle" class="stage" fill="#364fc7">Text Reconstruction</text>
+  <text x="360" y="419" text-anchor="middle" class="desc" fill="#3b5bdb">line → word tokens · char-offset ↔ token map</text>
+  <path class="flow" d="M360,434 L360,462" marker-end="url(#arrow)"/>
+
+  <!-- 5 Hybrid detection band -->
+  <rect x="120" y="464" width="480" height="118" rx="10" fill="#fdf0e6" stroke="#e8590c" stroke-width="1.5"/>
+  <text x="360" y="488" text-anchor="middle" class="stage" fill="#d9480f">Hybrid PII Detection</text>
+  <rect x="138" y="502" width="106" height="62" rx="7" fill="#ffffff" stroke="#e8590c" stroke-width="1.2"/>
+  <text x="191" y="528" text-anchor="middle" class="desc" font-weight="600" fill="#d9480f">Regex</text>
+  <text x="191" y="546" text-anchor="middle" font-size="10" fill="#e8590c">email·phone</text>
+  <text x="191" y="558" text-anchor="middle" font-size="10" fill="#e8590c">url·upi</text>
+  <rect x="252" y="502" width="106" height="62" rx="7" fill="#ffffff" stroke="#e8590c" stroke-width="1.2"/>
+  <text x="305" y="528" text-anchor="middle" class="desc" font-weight="600" fill="#d9480f">GLiNER NER</text>
+  <text x="305" y="546" text-anchor="middle" font-size="10" fill="#e8590c">configurable</text>
+  <text x="305" y="558" text-anchor="middle" font-size="10" fill="#e8590c">labels</text>
+  <rect x="366" y="502" width="106" height="62" rx="7" fill="#ffffff" stroke="#e8590c" stroke-width="1.2"/>
+  <text x="419" y="528" text-anchor="middle" class="desc" font-weight="600" fill="#d9480f">Name Trie</text>
+  <text x="419" y="546" text-anchor="middle" font-size="10" fill="#e8590c">first·mid·last</text>
+  <text x="419" y="558" text-anchor="middle" font-size="10" fill="#e8590c">dictionaries</text>
+  <rect x="480" y="502" width="106" height="62" rx="7" fill="#ffffff" stroke="#e8590c" stroke-width="1.2"/>
+  <text x="533" y="528" text-anchor="middle" class="desc" font-weight="600" fill="#d9480f">Context Rules</text>
+  <text x="533" y="546" text-anchor="middle" font-size="10" fill="#e8590c">"Name:" · Mr.</text>
+  <text x="533" y="558" text-anchor="middle" font-size="10" fill="#e8590c">prefixes</text>
+  <path class="flow" d="M360,582 L360,610" marker-end="url(#arrow)"/>
+
+  <!-- 6 Resolution -->
+  <rect x="120" y="612" width="480" height="64" rx="10" fill="#f3edfb" stroke="#7048e8" stroke-width="1.5"/>
+  <text x="360" y="640" text-anchor="middle" class="stage" fill="#5f3dc4">Entity Resolution</text>
+  <text x="360" y="661" text-anchor="middle" class="desc" fill="#6741d9">aggregate candidates · combine confidence · de-conflict overlaps</text>
+  <path class="flow" d="M360,676 L360,704" marker-end="url(#arrow)"/>
+
+  <!-- 7 Mapping -->
+  <rect x="120" y="706" width="480" height="64" rx="10" fill="#f3edfb" stroke="#7048e8" stroke-width="1.5"/>
+  <text x="360" y="734" text-anchor="middle" class="stage" fill="#5f3dc4">Spatial Mapping</text>
+  <text x="360" y="755" text-anchor="middle" class="desc" fill="#6741d9">entity span → token IDs → per-line bounding boxes (multi-line safe)</text>
+  <path class="flow" d="M360,770 L360,798" marker-end="url(#arrow)"/>
+
+  <!-- 8 Visualization -->
+  <rect x="120" y="800" width="480" height="64" rx="10" fill="#eef2fb" stroke="#3b5bdb" stroke-width="1.5"/>
+  <text x="360" y="828" text-anchor="middle" class="stage" fill="#364fc7">Visualization &amp; Redaction</text>
+  <text x="360" y="849" text-anchor="middle" class="desc" fill="#3b5bdb">annotate (colored boxes)  ·  redact (opaque fill) — configurable colors</text>
+  <path class="flow" d="M360,864 L360,892" marker-end="url(#arrow)"/>
+
+  <!-- 9 Outputs -->
+  <rect x="120" y="894" width="480" height="72" rx="10" fill="#eef2f5" stroke="#495057" stroke-width="1.5"/>
+  <text x="360" y="920" text-anchor="middle" class="stage" fill="#1a2233">Outputs</text>
+  <text x="360" y="942" text-anchor="middle" class="desc" fill="#343a40">result.json (auditable)  ·  annotated image  ·  redacted image</text>
+  <text x="360" y="958" text-anchor="middle" font-size="11" fill="#868e96">each entity records: text · label · confidence · bbox · source_tokens · detectors</text>
+  <path class="flow" d="M360,966 L360,994" marker-end="url(#arrow)"/>
+
+  <!-- 10 UI -->
+  <rect x="120" y="996" width="480" height="52" rx="10" fill="#1a2233"/>
+  <text x="360" y="1028" text-anchor="middle" class="stage" fill="#ffffff">Streamlit UI  ·  (FastAPI optional)</text>
+
+  <!-- ===== right rail: preserved chain highlight ===== -->
+  <rect x="660" y="182" width="300" height="470" rx="12" fill="#fff5f5" stroke="#e03131" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text x="810" y="212" text-anchor="middle" class="railh" fill="#c92a2a">The relationship we never break</text>
+
+  <g>
+    <rect x="690" y="234" width="240" height="40" rx="8" fill="#ffffff" stroke="#e03131"/>
+    <text x="810" y="259" text-anchor="middle" class="rail">"Krishna Kumar Rathore"</text>
+    <path class="flow" stroke="#e03131" d="M810,274 L810,292" marker-end="url(#arrowRed)"/>
+
+    <rect x="690" y="294" width="240" height="40" rx="8" fill="#ffffff" stroke="#e03131"/>
+    <text x="810" y="319" text-anchor="middle" class="rail">PERSON_NAME  (entity + type)</text>
+    <path class="flow" stroke="#e03131" d="M810,334 L810,352" marker-end="url(#arrowRed)"/>
+
+    <rect x="690" y="354" width="240" height="40" rx="8" fill="#ffffff" stroke="#e03131"/>
+    <text x="810" y="379" text-anchor="middle" class="rail">tokens #1 #2 #3</text>
+    <path class="flow" stroke="#e03131" d="M810,394 L810,412" marker-end="url(#arrowRed)"/>
+
+    <rect x="690" y="414" width="240" height="40" rx="8" fill="#ffffff" stroke="#e03131"/>
+    <text x="810" y="439" text-anchor="middle" class="rail">bbox [100,200,370,235]</text>
+    <path class="flow" stroke="#e03131" d="M810,454 L810,472" marker-end="url(#arrowRed)"/>
+
+    <rect x="690" y="474" width="240" height="40" rx="8" fill="#ffffff" stroke="#e03131"/>
+    <text x="810" y="499" text-anchor="middle" class="rail">pixel region → redacted</text>
+  </g>
+  <text x="810" y="556" text-anchor="middle" font-size="11" fill="#c92a2a">This audit trail is the core</text>
+  <text x="810" y="572" text-anchor="middle" font-size="11" fill="#c92a2a">engineering: every redaction</text>
+  <text x="810" y="588" text-anchor="middle" font-size="11" fill="#c92a2a">is explainable end-to-end.</text>
+
+  <!-- config sidebar note -->
+  <rect x="660" y="800" width="300" height="166" rx="12" fill="#f8f9fa" stroke="#adb5bd" stroke-width="1.5"/>
+  <text x="810" y="828" text-anchor="middle" class="railh">Cross-cutting</text>
+  <text x="678" y="856" class="rail">• config.yaml — single source of truth</text>
+  <text x="678" y="880" class="rail">   (registry, regex, weights, colors)</text>
+  <text x="678" y="906" class="rail">• typed schemas thread every stage</text>
+  <text x="678" y="930" class="rail">• swappable OCR &amp; NER interfaces</text>
+  <text x="678" y="954" class="rail">• precision-first (handles newspapers)</text>
+</svg>

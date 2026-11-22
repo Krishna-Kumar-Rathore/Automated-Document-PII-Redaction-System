@@ -50,10 +50,12 @@ def polygon_to_bbox(polygon: Polygon, clip_w: int | None = None,
     arr = np.asarray(polygon, dtype=np.float64)
     x1, y1 = arr[:, 0].min(), arr[:, 1].min()
     x2, y2 = arr[:, 0].max(), arr[:, 1].max()
+    # Clamp BOTH edges on each axis so a polygon that falls (partly or fully)
+    # outside the image never yields an inverted box (x1 > x2).
     if clip_w is not None:
-        x1, x2 = max(0, x1), min(clip_w, x2)
+        x1, x2 = min(max(0, x1), clip_w), min(max(0, x2), clip_w)
     if clip_h is not None:
-        y1, y2 = max(0, y1), min(clip_h, y2)
+        y1, y2 = min(max(0, y1), clip_h), min(max(0, y2), clip_h)
     return [int(round(x1)), int(round(y1)), int(round(x2)), int(round(y2))]
 
 

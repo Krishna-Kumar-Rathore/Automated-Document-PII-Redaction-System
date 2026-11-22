@@ -1,0 +1,11 @@
+[server]
+# Document scans rarely need more; keeps a public deployment from being abused.
+maxUploadSize = 10          # MB
+headless = true
+
+[browser]
+# Don't send usage telemetry from a tool that handles PII.
+gatherUsageStats = false
+
+[theme]
+primaryColor = "#1f6feb"

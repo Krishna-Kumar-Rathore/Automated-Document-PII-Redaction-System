@@ -1,0 +1,179 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 1320" font-family="'Segoe UI', system-ui, sans-serif">
+  <defs>
+    <marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#495057"/>
+    </marker>
+    <style>
+      .title { font-size: 25px; font-weight: 700; fill: #1a2233; }
+      .sub   { font-size: 13px; fill: #5c6b82; }
+      .layer { font-size: 12px; font-weight: 700; fill: #868e96; letter-spacing: 1px; }
+      .mod   { font-size: 15px; font-weight: 700; }
+      .cls   { font-size: 12px; font-family: 'Consolas', monospace; fill: #1a2233; }
+      .note  { font-size: 11px; fill: #5c6b82; }
+      .dc    { font-size: 12px; font-weight: 700; font-family: 'Consolas', monospace; }
+      .dcf   { font-size: 10.5px; font-family: 'Consolas', monospace; fill: #495057; }
+      .edge  { font-size: 11px; font-family: 'Consolas', monospace; fill: #364fc7; font-weight: 700; }
+      .flow  { stroke: #495057; stroke-width: 1.8; fill: none; }
+    </style>
+  </defs>
+
+  <rect width="1120" height="1320" fill="#ffffff"/>
+  <text x="40" y="46" class="title">Automated Document PII Redaction — Low-Level Design</text>
+  <text x="40" y="70" class="sub">Modules (left)  ·  key classes &amp; interfaces  ·  typed data contracts flowing between stages (blue edge labels)</text>
+
+  <!-- ================= LEFT: cross-cutting config + schemas ================= -->
+  <text x="40" y="108" class="layer">CROSS-CUTTING</text>
+  <rect x="40" y="118" width="228" height="120" rx="10" fill="#f8f9fa" stroke="#adb5bd" stroke-width="1.5"/>
+  <text x="56" y="142" class="mod" fill="#343a40">config/</text>
+  <text x="56" y="164" class="cls">config.yaml</text>
+  <text x="56" y="182" class="note">registry · regex · names ·</text>
+  <text x="56" y="197" class="note">resolver weights · colors</text>
+  <text x="56" y="219" class="cls">load_config() → Config</text>
+
+  <rect x="40" y="250" width="228" height="200" rx="10" fill="#fff9db" stroke="#f08c00" stroke-width="1.5"/>
+  <text x="56" y="274" class="mod" fill="#e67700">schemas/  (data contracts)</text>
+  <line x1="56" y1="284" x2="252" y2="284" stroke="#ffe066"/>
+  <text x="56" y="304" class="dc" fill="#e67700">OCRToken</text>
+  <text x="56" y="320" class="dcf">id·text·conf·bbox·polygon</text>
+  <text x="56" y="334" class="dcf">granularity·parent_id</text>
+  <text x="56" y="356" class="dc" fill="#e67700">EntityCandidate</text>
+  <text x="56" y="372" class="dcf">text·label·start·end</text>
+  <text x="56" y="386" class="dcf">confidence·detector</text>
+  <text x="56" y="408" class="dc" fill="#e67700">ResolvedEntity</text>
+  <text x="56" y="424" class="dcf">+ bboxes[] · source_tokens[]</text>
+  <text x="56" y="438" class="dcf">+ detectors[]  (audit trail)</text>
+
+  <rect x="40" y="462" width="228" height="96" rx="10" fill="#f8f9fa" stroke="#adb5bd" stroke-width="1.5"/>
+  <text x="56" y="486" class="mod" fill="#343a40">utils/</text>
+  <text x="56" y="508" class="cls">geometry.py</text>
+  <text x="56" y="524" class="note">affine compose / invert,</text>
+  <text x="56" y="539" class="note">polygon→bbox, merge_boxes</text>
+
+  <!-- dashed link showing config+schemas feed everything -->
+  <path d="M268,300 C300,300 300,300 318,300" class="flow" stroke="#f08c00" stroke-dasharray="4 3" marker-end="url(#a)"/>
+  <text x="276" y="292" class="note" fill="#e67700">feeds all →</text>
+
+  <!-- ================= RIGHT: pipeline stages ================= -->
+  <text x="330" y="108" class="layer">PIPELINE  (app/pipeline orchestrates)</text>
+
+  <!-- Preprocessing -->
+  <rect x="330" y="118" width="760" height="70" rx="10" fill="#e7f5f0" stroke="#0ca678" stroke-width="1.5"/>
+  <text x="348" y="142" class="mod" fill="#087f5b">preprocessing/preprocess.py</text>
+  <text x="348" y="164" class="cls">class Preprocessor.run(image) → PreprocessResult(image, transform, original_size)</text>
+  <text x="348" y="180" class="note">upscale · denoise · deskew — accumulates one 2×3 affine (original → processed)</text>
+  <path class="flow" d="M710,188 L710,206" marker-end="url(#a)"/>
+  <text x="718" y="201" class="edge">np.ndarray + affine M</text>
+
+  <!-- OCR -->
+  <rect x="330" y="208" width="760" height="86" rx="10" fill="#e7f5f0" stroke="#0ca678" stroke-width="1.5"/>
+  <text x="348" y="232" class="mod" fill="#087f5b">ocr/engine.py</text>
+  <text x="348" y="254" class="cls">OCREngine (ABC)  ◁——  RapidOCREngine     build_engine(cfg)</text>
+  <text x="348" y="272" class="note">detect(img, transform, size): runs RapidOCR, maps polygons back via inverse affine → original coords</text>
+  <text x="348" y="287" class="note">drops detections below text_score threshold</text>
+  <path class="flow" d="M710,294 L710,312" marker-end="url(#a)"/>
+  <text x="718" y="307" class="edge">List[OCRToken]  (granularity="line")</text>
+
+  <!-- Text reconstruction -->
+  <rect x="330" y="314" width="760" height="80" rx="10" fill="#eef2fb" stroke="#3b5bdb" stroke-width="1.5"/>
+  <text x="348" y="338" class="mod" fill="#364fc7">text/reconstruct.py</text>
+  <text x="348" y="360" class="cls">split lines → word tokens (interpolated boxes) · build full_text + char-offset ↔ token index</text>
+  <text x="348" y="378" class="note">this map is what lets NER character spans return to pixel boxes later</text>
+  <path class="flow" d="M710,394 L710,412" marker-end="url(#a)"/>
+  <text x="718" y="407" class="edge">full_text : str  +  offset→token map</text>
+
+  <!-- Detection layer -->
+  <text x="330" y="440" class="layer">DETECTION  (each emits EntityCandidate[])</text>
+  <rect x="330" y="450" width="760" height="150" rx="10" fill="#fdf0e6" stroke="#e8590c" stroke-width="1.5"/>
+  <text x="348" y="474" class="mod" fill="#d9480f">ner/</text>
+
+  <rect x="348" y="486" width="172" height="98" rx="8" fill="#ffffff" stroke="#e8590c"/>
+  <text x="360" y="508" class="cls" font-weight="700">regex_rules/</text>
+  <text x="360" y="526" class="dcf">EMAIL·PHONE·URL·UPI</text>
+  <text x="360" y="542" class="dcf">+ validators:</text>
+  <text x="360" y="557" class="dcf">Aadhaar (Verhoeff),</text>
+  <text x="360" y="572" class="dcf">PAN, IFSC → boost conf</text>
+
+  <rect x="530" y="486" width="172" height="98" rx="8" fill="#ffffff" stroke="#e8590c"/>
+  <text x="542" y="508" class="cls" font-weight="700">model.py</text>
+  <text x="542" y="526" class="dcf">NERModel (interface)</text>
+  <text x="542" y="542" class="dcf">◁ GLiNER (ONNX)</text>
+  <text x="542" y="562" class="dcf">configurable labels,</text>
+  <text x="542" y="577" class="dcf">swappable backend</text>
+
+  <rect x="712" y="486" width="172" height="98" rx="8" fill="#ffffff" stroke="#e8590c"/>
+  <text x="724" y="508" class="cls" font-weight="700">trie/</text>
+  <text x="724" y="526" class="dcf">first / middle / last</text>
+  <text x="724" y="542" class="dcf">name Tries</text>
+  <text x="724" y="562" class="dcf">normalize → lookup</text>
+  <text x="724" y="577" class="dcf">(≥2 signals to accept)</text>
+
+  <rect x="894" y="486" width="178" height="98" rx="8" fill="#ffffff" stroke="#e8590c"/>
+  <text x="906" y="508" class="cls" font-weight="700">context rules</text>
+  <text x="906" y="526" class="dcf">"Name:" / "Applicant"</text>
+  <text x="906" y="542" class="dcf">Mr./Shri/Smt.</text>
+  <text x="906" y="562" class="dcf">multi-token name</text>
+  <text x="906" y="577" class="dcf">runs</text>
+
+  <path class="flow" d="M710,600 L710,618" marker-end="url(#a)"/>
+  <text x="718" y="613" class="edge">List[EntityCandidate]  (many, overlapping)</text>
+
+  <!-- Resolver -->
+  <rect x="330" y="620" width="760" height="86" rx="10" fill="#f3edfb" stroke="#7048e8" stroke-width="1.5"/>
+  <text x="348" y="644" class="mod" fill="#5f3dc4">ner/resolver.py</text>
+  <text x="348" y="666" class="cls">class EntityResolver: aggregate → combine confidence (config weights) → resolve overlaps</text>
+  <text x="348" y="684" class="note">strategy: highest_score | longest_span · drops below min_final_confidence · records contributing detectors</text>
+  <path class="flow" d="M710,706 L710,724" marker-end="url(#a)"/>
+  <text x="718" y="719" class="edge">List[ResolvedEntity]  (deduped, scored)</text>
+
+  <!-- Mapping -->
+  <rect x="330" y="726" width="760" height="80" rx="10" fill="#f3edfb" stroke="#7048e8" stroke-width="1.5"/>
+  <text x="348" y="750" class="mod" fill="#5f3dc4">mapping/spatial.py</text>
+  <text x="348" y="772" class="cls">entity (start,end) → token IDs → group by line → one bbox per line (merge_boxes per group)</text>
+  <text x="348" y="790" class="note">multi-line entities (addresses) get a list of boxes, never one oversized rectangle</text>
+  <path class="flow" d="M710,806 L710,824" marker-end="url(#a)"/>
+  <text x="718" y="819" class="edge">ResolvedEntity.bboxes[]  populated</text>
+
+  <!-- Output + Visualization split -->
+  <rect x="330" y="826" width="368" height="96" rx="10" fill="#eef2fb" stroke="#3b5bdb" stroke-width="1.5"/>
+  <text x="348" y="850" class="mod" fill="#364fc7">visualization/</text>
+  <text x="348" y="872" class="cls">draw_entities() — annotate</text>
+  <text x="348" y="890" class="cls">redact() — opaque fill</text>
+  <text x="348" y="908" class="note">per-class colors from config (BGR)</text>
+
+  <rect x="722" y="826" width="368" height="96" rx="10" fill="#eef2f5" stroke="#495057" stroke-width="1.5"/>
+  <text x="740" y="850" class="mod" fill="#1a2233">output/</text>
+  <text x="740" y="872" class="cls">build result.json</text>
+  <text x="740" y="890" class="note">ocr[] + entities[] with bbox,</text>
+  <text x="740" y="905" class="note">source_tokens, detectors → auditable</text>
+
+  <path class="flow" d="M514,922 L514,952" marker-end="url(#a)"/>
+  <path class="flow" d="M906,922 L906,952" marker-end="url(#a)"/>
+
+  <!-- UI layer -->
+  <text x="330" y="972" class="layer">INTERFACE</text>
+  <rect x="330" y="982" width="760" height="70" rx="10" fill="#1a2233"/>
+  <text x="348" y="1008" class="mod" fill="#ffffff">app/ui.py — Streamlit</text>
+  <text x="348" y="1030" class="cls" fill="#ced4da">upload → process → original | annotated → entity table → downloads (json, annotated, redacted)</text>
+  <text x="348" y="1046" class="note" fill="#adb5bd">metrics: OCR token count · entity count · processing time · confidence     ·     FastAPI optional later</text>
+
+  <!-- Eval callout -->
+  <rect x="40" y="600" width="228" height="230" rx="10" fill="#ebfbee" stroke="#37b24d" stroke-width="1.5"/>
+  <text x="56" y="624" class="mod" fill="#2b8a3e">eval/</text>
+  <line x1="56" y1="634" x2="252" y2="634" stroke="#b2f2bb"/>
+  <text x="56" y="656" class="note">• 20–30 hand-labelled docs</text>
+  <text x="56" y="678" class="note">• precision / recall / F1</text>
+  <text x="56" y="694" class="note">  per entity type</text>
+  <text x="56" y="716" class="note">• tune resolver weights</text>
+  <text x="56" y="732" class="note">  against ground truth</text>
+  <text x="56" y="754" class="note">• benchmark vs Presidio</text>
+  <text x="56" y="776" class="note">  as a baseline</text>
+  <text x="56" y="806" class="note" fill="#2b8a3e" font-weight="700">turns claims into numbers</text>
+
+  <!-- footer legend -->
+  <text x="40" y="1090" class="layer">DESIGN PRINCIPLES</text>
+  <text x="40" y="1114" class="note">1.  One data contract (schemas) threads every stage — the audit trail is a byproduct, not an afterthought.</text>
+  <text x="40" y="1134" class="note">2.  OCR &amp; NER sit behind interfaces (OCREngine, NERModel) — backends swap without touching the pipeline.</text>
+  <text x="40" y="1154" class="note">3.  All thresholds, weights, patterns, colors live in config.yaml — nothing hard-coded, everything tunable.</text>
+  <text x="40" y="1174" class="note">4.  Coordinates are always mapped back to the ORIGINAL image via the inverse affine — redactions land exactly right.</text>
+  <text x="40" y="1194" class="note">5.  Detection is precision-first and multi-signal — arbitrary inputs (e.g. newspapers) don't over-trigger.</text>
+</svg>

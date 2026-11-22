@@ -30,6 +30,10 @@ models/
 data/private/
 *.real.*
 
+# ---- Personal notes / secrets ----
+docs/interview_script.md
+.streamlit/secrets.toml
+
 # ---- OS / editor cruft ----
 .DS_Store
 Thumbs.db
